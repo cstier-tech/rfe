@@ -28,7 +28,7 @@ type Step = {
 const STEPS: Step[] = [
   {
     title: 'Request for Estimate',
-    description: 'Submit the form to request an estimate',
+    description: 'Fill out the information required to recieve an estimate. ',
     Component: Overview,
     fields: [
       'name',
@@ -44,19 +44,19 @@ const STEPS: Step[] = [
   },
   {
     title: 'Components',
-    description: 'List the components you need.',
+    description: 'List out the individual components for this job.',
     Component: Components,
     fields: ['components'],
   },
   {
     title: 'Packs',
-    description: 'Group components into packs.',
+    description: 'How will the components in this job be packed?',
     Component: Packs,
-    fields: ['packs'],
+    fields: ['convenientCartons', 'packs'],
   },
   {
     title: 'Shipping',
-    description: 'How this job ships.',
+    description: 'Basic shipping details.',
     Component: Shipping,
     fields: [
       'totalShipments',
@@ -90,6 +90,39 @@ const defaultComponent = () => ({
   sourceJobNumber: '',
 })
 
+// A fully-specified blank form, explicitly clearing every field rather than
+// omitting fields and relying on reset() to clear whatever isn't listed —
+// used both for the form's initial state and to wipe a stale edit/duplicate
+// session when navigating to the plain "start a new RFE" route.
+const blankFormValues = (): FormValues => ({
+  rfeId: crypto.randomUUID(),
+  versionId: crypto.randomUUID(),
+  name: '',
+  dueDate: undefined,
+  customer: '',
+  customerNumber: '',
+  salesRep: '',
+  jobType: 'New Job',
+  prevJobNumber: '',
+  changesFromPrev: '',
+  description: '',
+  isKit: undefined,
+  kittingRequired: undefined,
+  qty: [{}],
+  components: [defaultComponent()],
+  convenientCartons: false,
+  packs: [],
+  totalShipments: undefined,
+  shipMethod: undefined,
+  asnRequired: false,
+  asnInstructions: '',
+  approvalNeededPriorToShip: false,
+  internationalShipment: false,
+  usnpcCode: '',
+  customsValue: '',
+  customsDescription: '',
+})
+
 function RfeForm() {
   // `mode` is 'edit' or 'duplicate'; `sourceRfeId` is the RFE either loads
   // data from. Editing reuses that RFE's id; duplicating loads the same data
@@ -115,14 +148,8 @@ function RfeForm() {
       // rest of the fields are filled in by the prefill effect below once
       // the source version loads. `versionId` always gets a fresh id —
       // every save (new, edit, or duplicate) creates a new version row.
+      ...blankFormValues(),
       rfeId: isEditing && sourceRfeId ? sourceRfeId : crypto.randomUUID(),
-      versionId: crypto.randomUUID(),
-      qty: [{}],
-      components: [defaultComponent()],
-      packs: [],
-      asnRequired: false,
-      approvalNeededPriorToShip: false,
-      internationalShipment: false,
     },
   })
   const [stepIndex, setStepIndex] = useState(0)
@@ -132,6 +159,9 @@ function RfeForm() {
   const isNewRfe = !isEditing
 
   useEffect(() => {
+    // App.tsx keys RfeForm by route pathname, so the plain "start a new RFE"
+    // route always gets a fresh mount (and thus fresh, blank state from
+    // useForm's defaultValues) — nothing to load here.
     if (!sourceRfeId || (!isEditing && !isDuplicating)) return
 
     const loadFromSource = async () => {
@@ -170,13 +200,22 @@ function RfeForm() {
         return
       }
 
-      const components = (componentsRes.data ?? []).filter(
-        (c) => c.version_id === latestVersion.id,
-      )
+      const components = (componentsRes.data ?? [])
+        .filter((c) => c.version_id === latestVersion.id)
+        .sort((a, b) => Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0))
       const packs = (packsRes.data ?? []).filter(
         (p) => p.version_id === latestVersion.id,
       )
       const packItems = packItemsRes.data ?? []
+
+      const quantities = (quantitiesRes.data ?? []).filter(
+        (q) => q.version_id === latestVersion.id,
+      )
+      const overviewQtyValues = quantities.map((q) => q.quantity ?? null)
+      const kittingRequired = (latestVersion.kitting_required ?? undefined) as
+        | 'Yes'
+        | 'No'
+        | undefined
 
       // Every save inserts brand new Components/Packs rows for the new
       // version, so the loaded (previous version's) component ids can't be
@@ -186,22 +225,41 @@ function RfeForm() {
       const newComponents = components.map((component) => {
         const id = crypto.randomUUID()
         componentIdMap.set(component.id, id)
-        return {
+
+        const base = {
           id,
           name: component.component_name ?? '',
           finalSize: component.final_size ?? '',
           flatSize: component.flat_size ?? '',
           stock: component.stock ?? '',
           coating: component.coating ?? '',
-          qty: Number(component.quantity) || 1,
           source: (component.source ?? '') as ComponentSource,
           sourceJobNumber: component.job_number ?? '',
         }
-      })
 
-      const quantities = (quantitiesRes.data ?? []).filter(
-        (q) => q.version_id === latestVersion.id,
-      )
+        if (kittingRequired !== 'No') {
+          return { ...base, qty: Number(component.quantity) || 1 }
+        }
+
+        // Non-kit quantity is stored as pipe-delimited text, one value per
+        // overview qty tier (see onSubmit below). Reconstitute it back into
+        // per-tier overrides so editing preserves which tiers were manually
+        // overridden vs. tracking the overview quantity automatically.
+        const parsedValues: (number | null)[] = String(component.quantity ?? '')
+          .split('|')
+          .map((part: string) => part.trim())
+          .map((part: string) => {
+            const n = Number(part)
+            return part !== '' && !Number.isNaN(n) ? n : null
+          })
+
+        const aligned = parsedValues.length === overviewQtyValues.length
+        const qtyOverrides: (number | null)[] = aligned
+          ? parsedValues.map((v, i) => (v === overviewQtyValues[i] ? null : v))
+          : overviewQtyValues.map((_, i) => parsedValues[i] ?? null)
+
+        return { ...base, qty: 1, qtyOverrides }
+      })
 
       methods.reset({
         rfeId: isEditing && sourceRfeId ? sourceRfeId : crypto.randomUUID(),
@@ -228,6 +286,7 @@ function RfeForm() {
             ? quantities.map((q) => ({ qty: q.quantity ?? undefined }))
             : [{}],
         components: newComponents.length > 0 ? newComponents : [defaultComponent()],
+        convenientCartons: latestVersion.convenient_cartons ?? false,
         packs: packs.map((pack) => {
           const rawType = pack.pack_type ?? ''
           const isKnownType = KNOWN_PACK_TYPES.includes(rawType)
@@ -279,6 +338,20 @@ function RfeForm() {
     const packs = data.packs.map(({ typeOther, ...pack }) =>
       pack.type === 'Other' ? { ...pack, type: typeOther ?? '' } : pack,
     )
+
+    // Kit mode stores a single qty-per-kit number. Non-kit mode stores one
+    // value per overview qty tier (an override where set, else that tier's
+    // own value), pipe-delimited — `Components.quantity` is a text column.
+    const componentQuantity = (component: FormValues['components'][number]) => {
+      const tiers = data.qty ?? []
+      if (data.kittingRequired !== 'No' || tiers.length === 0) {
+        return component.qty
+      }
+      return tiers
+        .map((tier, i) => component.qtyOverrides?.[i] ?? tier.qty ?? '')
+        .join(' | ')
+    }
+
     console.log({ ...data, packs })
 
     if (isNewRfe) {
@@ -330,6 +403,7 @@ function RfeForm() {
         changes_from_prev: data.changesFromPrev,
         // version_type: data.,
         kitting_required: data.kittingRequired,
+        convenient_cartons: data.convenientCartons,
         num_of_shipments: data.totalShipments,
         asn_required: data.asnRequired,
         asn_instructions: data.asnInstructions,
@@ -348,7 +422,7 @@ function RfeForm() {
     }
 
     const { error: componentsError } = await supabase.from('Components').insert(
-      data.components.map((component) => ({
+      data.components.map((component, index) => ({
         id: component.id,
         component_name: component.name,
         version_id: data.versionId,
@@ -357,8 +431,9 @@ function RfeForm() {
         coating: component.coating,
         flat_size: component.flatSize,
         job_number: component.sourceJobNumber,
-        quantity: component.qty,
+        quantity: componentQuantity(component),
         source: component.source,
+        sort_order: String(index),
       })),
     )
 

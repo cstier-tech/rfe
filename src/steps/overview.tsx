@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import { Input } from '@/components/ui/input'
 import {
     Field,
@@ -11,6 +12,15 @@ import { Button } from '@/components/ui/button'
 import { DatePickerInput } from '@/components/ui/datepicker'
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { RadioButtonGroup } from '@/components/ui/radio-button-group'
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { useFormContext, Controller, useWatch, useFieldArray } from 'react-hook-form'
 import type { FormValues } from '@/lib/form'
 
@@ -39,6 +49,49 @@ function Overview() {
         append: appendQty,
         remove: removeQty,
     } = useFieldArray({ control, name: 'qty' })
+
+    // Live values, used to detect qty edits and to check which components
+    // (if any) have manually overridden quantities.
+    const watchedQty = useWatch({ control, name: 'qty' })
+    const watchedComponents = useWatch({ control, name: 'components' })
+
+    const [reviewNames, setReviewNames] = useState<string[]>([])
+    const prevQtySerialized = useRef<string | null>(null)
+
+    // Whenever the overview quantities change (an edit, or a tier added or
+    // removed), components that were never manually overridden should just
+    // pick up the new values automatically (they already do, since their
+    // displayed qty falls back to these tiers). Components that do have an
+    // override won't update on their own, so flag them for the user to
+    // review instead of silently going stale.
+    useEffect(() => {
+        const serialized = JSON.stringify(
+            (watchedQty ?? []).map((tier) => tier?.qty ?? null),
+        )
+
+        if (prevQtySerialized.current === null) {
+            prevQtySerialized.current = serialized
+            return
+        }
+
+        if (serialized === prevQtySerialized.current) return
+        prevQtySerialized.current = serialized
+
+        const overriddenNames = (watchedComponents ?? [])
+            .map(
+                (component, index) =>
+                    [
+                        component?.name?.trim() || `Component ${index + 1}`,
+                        component?.qtyOverrides?.some((v) => v != null) ?? false,
+                    ] as const,
+            )
+            .filter(([, hasOverride]) => hasOverride)
+            .map(([name]) => name)
+
+        if (overriddenNames.length > 0) {
+            setReviewNames(overriddenNames)
+        }
+    }, [watchedQty, watchedComponents])
 
     return (
         <div className="flex flex-col gap-4">
@@ -216,6 +269,27 @@ function Overview() {
                 </Field>
             )}
 
+            <AlertDialog
+                open={reviewNames.length > 0}
+                onOpenChange={(open) => {
+                    if (!open) setReviewNames([])
+                }}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Review quantity overrides</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Please review the quantity overrides for{' '}
+                            {reviewNames.join(', ')}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogAction onClick={() => setReviewNames([])}>
+                            OK
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
 
     )

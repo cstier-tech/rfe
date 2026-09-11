@@ -14,6 +14,11 @@ export type ComponentItem = {
   stock: string
   coating: string
   qty: number
+  // Per-overview-qty-tier overrides, only meaningful when kittingRequired
+  // === 'No'. Parallel to the top-level `qty` tiers array by index; an
+  // entry of null/undefined means that tier isn't overridden and falls
+  // back to the overview quantity at that index.
+  qtyOverrides?: (number | null)[]
   source: ComponentSource
   // Only meaningful when source === 'LCP Production'.
   sourceJobNumber: string
@@ -56,6 +61,7 @@ export type FormValues = {
   kittingRequired?: 'Yes' | 'No'
   qty?: QtyTier[]
   components: ComponentItem[]
+  convenientCartons?: boolean
   packs: Pack[]
 
   // Shipping

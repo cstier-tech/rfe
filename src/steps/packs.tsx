@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronRightIcon } from 'lucide-react'
-import { useFormContext, useFieldArray, useWatch } from 'react-hook-form'
+import { useFormContext, useFieldArray, useWatch, Controller } from 'react-hook-form'
 import { Input } from '@/components/ui/input'
 import { Field, FieldLabel, FieldError } from '@/components/ui/field'
 import { Button } from '@/components/ui/button'
@@ -49,6 +49,24 @@ function Packs() {
 
     return (
         <div className="flex flex-col gap-4">
+            <Controller
+                control={control}
+                name="convenientCartons"
+                defaultValue={false}
+                render={({ field }) => (
+                    <Field orientation="horizontal">
+                        <Checkbox
+                            id="convenientCartons"
+                            checked={!!field.value}
+                            onCheckedChange={(v) => field.onChange(v === true)}
+                        />
+                        <FieldLabel htmlFor="convenientCartons">
+                            Pack in Convenient Cartons
+                        </FieldLabel>
+                    </Field>
+                )}
+            />
+
             {fields.length === 0 && (
                 <p className="text-sm text-muted-foreground">No packs yet.</p>
             )}

@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from 'react'
-import { ChevronRightIcon, MoreVertical } from 'lucide-react'
+import { Check, ChevronRightIcon, MoreVertical } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 import { supabase } from '@/lib/supabase'
@@ -41,20 +41,34 @@ type ComponentRow = {
   flat_size: string | null
   quantity: string | null
   source: string | null
+  sort_order: string | null
 }
 
 type PackRow = {
   id: number
   version_id: string
   pack_type: string | null
-  qty_per_pack: string | null
   num_of_packs: string | null
+}
+
+// qty_per_pack lives per component, not on the pack itself — a pack can hold
+// several components, each potentially packed at a different quantity.
+type PackItemRow = {
+  pack_id: number
+  component_id: string
+  qty_per_pack: string | null
 }
 
 type QuantityRow = {
   id: string
   version_id: string | null
   quantity: number | null
+}
+
+type RfeRow = {
+  id: string
+  is_job: boolean | null
+  switched_to_job_date: string | null
 }
 
 // One row per RFE — the latest version of it, since that's what carries the
@@ -84,6 +98,14 @@ function groupByVersionId<T extends { version_id: string | null }>(rows: T[]) {
   return grouped
 }
 
+function groupByPackId(rows: PackItemRow[]) {
+  const grouped = new Map<number, PackItemRow[]>()
+  for (const row of rows) {
+    grouped.set(row.pack_id, [...(grouped.get(row.pack_id) ?? []), row])
+  }
+  return grouped
+}
+
 // Every version of each RFE (not just the latest), newest first, for the
 // version history table in the expanded row.
 function groupByRfeId(versions: RfeVersion[]) {
@@ -109,30 +131,54 @@ function Dashboard() {
   const [packsByVersion, setPacksByVersion] = useState(
     new Map<string, PackRow[]>(),
   )
+  const [packItemsByPack, setPackItemsByPack] = useState(
+    new Map<number, PackItemRow[]>(),
+  )
+  const [componentNameById, setComponentNameById] = useState(
+    new Map<string, string>(),
+  )
   const [quantitiesByVersion, setQuantitiesByVersion] = useState(
     new Map<string, QuantityRow[]>(),
   )
+  const [rfeById, setRfeById] = useState(new Map<string, RfeRow>())
   const [expanded, setExpanded] = useState(new Set<string>())
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const load = async () => {
-      const [versions, components, packs, quantities] = await Promise.all([
-        supabase.from('RFE Versions').select('*'),
-        supabase.from('Components').select('*'),
-        supabase.from('Packs').select('*'),
-        supabase.from('RFE Quantities').select('*'),
-      ])
+      const [versions, components, packs, packItems, quantities, rfes] =
+        await Promise.all([
+          supabase.from('RFE Versions').select('*'),
+          supabase.from('Components').select('*'),
+          supabase.from('Packs').select('*'),
+          supabase.from('Pack Items').select('*'),
+          supabase.from('RFE Quantities').select('*'),
+          supabase.from('RFEs').select('*'),
+        ])
 
-      for (const { error } of [versions, components, packs, quantities]) {
+      for (const { error } of [versions, components, packs, packItems, quantities, rfes]) {
         if (error) console.error(error)
       }
 
+      const sortedComponents = [...(components.data ?? [])].sort(
+        (a, b) => Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0),
+      )
+
       setRfes(latestPerRfe(versions.data ?? []))
       setVersionsByRfe(groupByRfeId(versions.data ?? []))
-      setComponentsByVersion(groupByVersionId(components.data ?? []))
+      setComponentsByVersion(groupByVersionId(sortedComponents))
+      setComponentNameById(
+        new Map(
+          sortedComponents.map((c) => [
+            c.id,
+            c.component_name || 'Untitled component',
+          ]),
+        ),
+      )
       setPacksByVersion(groupByVersionId(packs.data ?? []))
+      setPackItemsByPack(groupByPackId(packItems.data ?? []))
       setQuantitiesByVersion(groupByVersionId(quantities.data ?? []))
+      setRfeById(new Map((rfes.data ?? []).map((r) => [r.id, r])))
       setLoading(false)
     }
 
@@ -144,6 +190,25 @@ function Dashboard() {
       const next = new Set(prev)
       if (next.has(rfeId)) next.delete(rfeId)
       else next.add(rfeId)
+      return next
+    })
+  }
+
+  const switchToJob = async (rfeId: string) => {
+    const switchedToJobDate = new Date().toISOString()
+    const { error } = await supabase
+      .from('RFEs')
+      .update({ is_job: true, switched_to_job_date: switchedToJobDate })
+      .eq('id', rfeId)
+
+    if (error) {
+      console.error(error)
+      return
+    }
+
+    setRfeById((prev) => {
+      const next = new Map(prev)
+      next.set(rfeId, { id: rfeId, is_job: true, switched_to_job_date: switchedToJobDate })
       return next
     })
   }
@@ -167,6 +232,7 @@ function Dashboard() {
                   <TableHead>Due Date</TableHead>
                   <TableHead>Customer</TableHead>
                   <TableHead>Job Type</TableHead>
+                  <TableHead>Job</TableHead>
                   <TableHead className="w-8" />
                 </TableRow>
               </TableHeader>
@@ -196,6 +262,11 @@ function Dashboard() {
                         </TableCell>
                         <TableCell>{rfe.customer_name || '—'}</TableCell>
                         <TableCell>{rfe.job_type || '—'}</TableCell>
+                        <TableCell>
+                          {rfeById.get(rfe.rfe_id)?.is_job ? (
+                            <Check className="size-4 text-green-600" />
+                          ) : null}
+                        </TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -210,6 +281,11 @@ function Dashboard() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem
+                                onClick={() => navigate(`/rfe/${rfe.rfe_id}/view`)}
+                              >
+                                View
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
                                 onClick={() => navigate(`/rfe/${rfe.rfe_id}/edit`)}
                               >
                                 Edit
@@ -221,13 +297,18 @@ function Dashboard() {
                               >
                                 Duplicate
                               </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => switchToJob(rfe.rfe_id)}
+                              >
+                                Switch to Job
+                              </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
                       </TableRow>
                       {isOpen && (
                         <TableRow key={`${rfe.rfe_id}-details`}>
-                          <TableCell colSpan={6} className="whitespace-normal bg-muted/30">
+                          <TableCell colSpan={7} className="whitespace-normal bg-muted/30">
                             <div className="flex flex-col gap-4 p-2">
                               <DetailTable
                                 title="Versions"
@@ -256,7 +337,7 @@ function Dashboard() {
                                 rows={componentsByVersion.get(rfe.id) ?? []}
                                 columns={[
                                   { label: 'Name', render: (r) => r.component_name || '—' },
-                                  { label: 'Final Size', render: (r) => r.final_size || '—' },
+                                  { label: 'Finished Size', render: (r) => r.final_size || '—' },
                                   { label: 'Flat Size', render: (r) => r.flat_size || '—' },
                                   { label: 'Stock', render: (r) => r.stock || '—' },
                                   { label: 'Coating', render: (r) => r.coating || '—' },
@@ -264,14 +345,10 @@ function Dashboard() {
                                   { label: 'Source', render: (r) => r.source || '—' },
                                 ]}
                               />
-                              <DetailTable
-                                title="Packs"
-                                rows={packsByVersion.get(rfe.id) ?? []}
-                                columns={[
-                                  { label: 'Pack Type', render: (r) => r.pack_type || '—' },
-                                  { label: 'Qty per Pack', render: (r) => r.qty_per_pack || '—' },
-                                  { label: 'Num of Packs', render: (r) => r.num_of_packs || '—' },
-                                ]}
+                              <PacksDetail
+                                packs={packsByVersion.get(rfe.id) ?? []}
+                                packItemsByPack={packItemsByPack}
+                                componentNameById={componentNameById}
                               />
                             </div>
                           </TableCell>
@@ -328,6 +405,44 @@ function DetailTable<T extends { id: string | number }>({
               ))}
             </TableBody>
           </Table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PacksDetail({
+  packs,
+  packItemsByPack,
+  componentNameById,
+}: {
+  packs: PackRow[]
+  packItemsByPack: Map<number, PackItemRow[]>
+  componentNameById: Map<string, string>
+}) {
+  return (
+    <div>
+      <p className="mb-1 text-xs font-medium text-muted-foreground">Packs</p>
+      {packs.length === 0 ? (
+        <p className="text-xs text-muted-foreground">None</p>
+      ) : (
+        <div className="flex flex-col gap-3 rounded-md border bg-background p-2">
+          {packs.map((pack, i) => (
+            <div key={pack.id} className="flex flex-col gap-0.5 text-sm">
+              <p className="font-medium">
+                Pack {i + 1}
+                {pack.pack_type ? ` — ${pack.pack_type}` : ''} (
+                {pack.num_of_packs || '—'} packs)
+              </p>
+              {(packItemsByPack.get(pack.id) ?? []).map((item, j) => (
+                <p key={j} className="pl-3 text-muted-foreground">
+                  {componentNameById.get(item.component_id) ??
+                    'Unknown component'}
+                  : {item.qty_per_pack ?? '—'} per pack
+                </p>
+              ))}
+            </div>
+          ))}
         </div>
       )}
     </div>
