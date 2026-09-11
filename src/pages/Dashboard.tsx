@@ -210,6 +210,11 @@ function Dashboard() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem
+                                onClick={() => navigate(`/rfe/${rfe.rfe_id}/view`)}
+                              >
+                                View
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
                                 onClick={() => navigate(`/rfe/${rfe.rfe_id}/edit`)}
                               >
                                 Edit

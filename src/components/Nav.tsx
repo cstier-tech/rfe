@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 
 const links = [
-  { to: '/', label: 'Form', end: true },
+  { to: '/', label: 'New RFE', end: true },
   { to: '/dashboard', label: 'Dashboard', end: false },
 ]
 

@@ -90,6 +90,38 @@ const defaultComponent = () => ({
   sourceJobNumber: '',
 })
 
+// A fully-specified blank form, explicitly clearing every field rather than
+// omitting fields and relying on reset() to clear whatever isn't listed —
+// used both for the form's initial state and to wipe a stale edit/duplicate
+// session when navigating to the plain "start a new RFE" route.
+const blankFormValues = (): FormValues => ({
+  rfeId: crypto.randomUUID(),
+  versionId: crypto.randomUUID(),
+  name: '',
+  dueDate: undefined,
+  customer: '',
+  customerNumber: '',
+  salesRep: '',
+  jobType: 'New Job',
+  prevJobNumber: '',
+  changesFromPrev: '',
+  description: '',
+  isKit: undefined,
+  kittingRequired: undefined,
+  qty: [{}],
+  components: [defaultComponent()],
+  packs: [],
+  totalShipments: undefined,
+  shipMethod: undefined,
+  asnRequired: false,
+  asnInstructions: '',
+  approvalNeededPriorToShip: false,
+  internationalShipment: false,
+  usnpcCode: '',
+  customsValue: '',
+  customsDescription: '',
+})
+
 function RfeForm() {
   // `mode` is 'edit' or 'duplicate'; `sourceRfeId` is the RFE either loads
   // data from. Editing reuses that RFE's id; duplicating loads the same data
@@ -115,14 +147,8 @@ function RfeForm() {
       // rest of the fields are filled in by the prefill effect below once
       // the source version loads. `versionId` always gets a fresh id —
       // every save (new, edit, or duplicate) creates a new version row.
+      ...blankFormValues(),
       rfeId: isEditing && sourceRfeId ? sourceRfeId : crypto.randomUUID(),
-      versionId: crypto.randomUUID(),
-      qty: [{}],
-      components: [defaultComponent()],
-      packs: [],
-      asnRequired: false,
-      approvalNeededPriorToShip: false,
-      internationalShipment: false,
     },
   })
   const [stepIndex, setStepIndex] = useState(0)
@@ -132,6 +158,9 @@ function RfeForm() {
   const isNewRfe = !isEditing
 
   useEffect(() => {
+    // App.tsx keys RfeForm by route pathname, so the plain "start a new RFE"
+    // route always gets a fresh mount (and thus fresh, blank state from
+    // useForm's defaultValues) — nothing to load here.
     if (!sourceRfeId || (!isEditing && !isDuplicating)) return
 
     const loadFromSource = async () => {
