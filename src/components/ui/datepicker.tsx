@@ -66,7 +66,7 @@ export function DatePickerInput({
                 <InputGroupInput
                     id={id}
                     value={text}
-                    placeholder="June 01, 2025"
+                    placeholder="MMMM D, YYYY"
                     onChange={(e) => {
                         setText(e.target.value)
                         if (e.target.value === "") {

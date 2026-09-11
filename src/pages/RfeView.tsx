@@ -17,6 +17,7 @@ type RfeVersionRow = {
   description: string | null
   due_date: string | null
   kitting_required: string | null
+  convenient_cartons: boolean | null
   num_of_shipments: string | number | null
   ship_method: string | null
   asn_required: boolean | null
@@ -38,6 +39,7 @@ type ComponentRow = {
   quantity: string | null
   source: string | null
   job_number: string | null
+  sort_order: string | null
 }
 
 type PackRow = {
@@ -136,7 +138,11 @@ function RfeView() {
         if (error) console.error(error)
       }
 
-      setComponents(componentsRes.data ?? [])
+      setComponents(
+        [...(componentsRes.data ?? [])].sort(
+          (a, b) => Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0),
+        ),
+      )
       setPacks(packsRes.data ?? [])
       setPackItems(packItemsRes.data ?? [])
       setQuantities(quantitiesRes.data ?? [])
@@ -233,7 +239,7 @@ function RfeView() {
                     {c.component_name ? ` — ${c.component_name}` : ''}
                   </p>
                   <Field label="Name" value={c.component_name} />
-                  <Field label="Final Size" value={c.final_size} />
+                  <Field label="Finished Size" value={c.final_size} />
                   <Field label="Flat Size" value={c.flat_size} />
                   <Field label="Stock" value={c.stock} />
                   <Field label="Coating" value={c.coating} />
@@ -246,6 +252,10 @@ function RfeView() {
           </Section>
 
           <Section title="Packs">
+            <Field
+              label="Pack in Convenient Cartons"
+              value={version.convenient_cartons ? 'Yes' : 'No'}
+            />
             {packs.length === 0 ? (
               <p className="text-sm text-muted-foreground">No packs.</p>
             ) : (
