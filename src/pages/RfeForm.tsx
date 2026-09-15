@@ -88,6 +88,7 @@ const defaultComponent = () => ({
   qty: 1,
   source: '' as ComponentSource,
   sourceJobNumber: '',
+  instruction: '',
 })
 
 // A fully-specified blank form, explicitly clearing every field rather than
@@ -235,6 +236,7 @@ function RfeForm() {
           coating: component.coating ?? '',
           source: (component.source ?? '') as ComponentSource,
           sourceJobNumber: component.job_number ?? '',
+          instruction: component.instruction ?? '',
         }
 
         if (kittingRequired !== 'No') {
@@ -434,6 +436,7 @@ function RfeForm() {
         quantity: componentQuantity(component),
         source: component.source,
         sort_order: String(index),
+        instruction: component.instruction,
       })),
     )
 

@@ -158,7 +158,7 @@ function PackCard({
                 <RadioButtonGroup
                     control={control}
                     name={`packs.${packIndex}.type`}
-                    legend='Pack Type'
+                    legend='Pack Type *'
                     options={PACK_TYPES}
                     rules={{ required: 'Pack Type is required' }}
                     onValueChange={(value) => {
@@ -176,7 +176,7 @@ function PackCard({
                 {packType === 'Other' && (
                     <Field>
                         <FieldLabel htmlFor={`packs.${packIndex}.typeOther`}>
-                            Please specify
+                            Please specify *
                         </FieldLabel>
                         <Input
                             id={`packs.${packIndex}.typeOther`}
@@ -190,7 +190,7 @@ function PackCard({
 
                 <Field>
                     <FieldLabel htmlFor={`packs.${packIndex}.qty`}>
-                        Pack Qty
+                        Pack Qty *
                     </FieldLabel>
                     <Input
                         id={`packs.${packIndex}.qty`}
@@ -221,6 +221,7 @@ function PackCard({
                                         <th className="py-1 font-medium">Component</th>
                                         <th className="py-1 font-medium">Source</th>
                                         <th className="py-1 font-medium">Qty Per Pack</th>
+                                        <th className="py-1 font-medium">Total Needed</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -250,6 +251,7 @@ function PackCard({
                                                     }
                                                 }}
                                             />
+                                            // <td></td>
                                         )
                                     })}
                                 </tbody>
@@ -273,12 +275,14 @@ type ComponentRowProps = {
 function ComponentRow({
     packIndex,
     itemIndex,
+    
     label,
     source,
     onToggle,
 }: ComponentRowProps) {
     const {
         register,
+        control,
         formState: { errors },
     } = useFormContext<FormValues>()
 
@@ -286,6 +290,13 @@ function ComponentRow({
     const qtyError = selected
         ? errors.packs?.[packIndex]?.items?.[itemIndex]?.qtyPerPack
         : undefined
+
+    const [qtyPerPack, packsQty] = useWatch({
+        control,
+        name: [`packs.${packIndex}.items.${itemIndex}.qtyPerPack`, `packs.${packIndex}.qty`]
+    })
+
+    const totalNeeded = selected ? qtyPerPack * packsQty : '—'
 
     return (
         <tr className="border-b border-border last:border-0">
@@ -317,6 +328,7 @@ function ComponentRow({
                     <span className="text-muted-foreground">—</span>
                 )}
             </td>
+            <td>{totalNeeded}</td>
         </tr>
     )
 }

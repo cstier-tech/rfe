@@ -22,6 +22,8 @@ export type ComponentItem = {
   source: ComponentSource
   // Only meaningful when source === 'LCP Production'.
   sourceJobNumber: string
+
+  instruction: string
 }
 
 export type PackItem = {

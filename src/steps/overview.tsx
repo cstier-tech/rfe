@@ -97,7 +97,7 @@ function Overview() {
         <div className="flex flex-col gap-4">
             <div className="flex gap-4">
                 <Field className='w-full'>
-                    <FieldLabel htmlFor="name">RFE Name</FieldLabel>
+                    <FieldLabel htmlFor="name">RFE Name *</FieldLabel>
                     <Input
 
                         id="name"
@@ -112,7 +112,7 @@ function Overview() {
                     render={({ field, fieldState }) => (
                         <DatePickerInput
                             id="dueDate"
-                            label="Requested Due Date"
+                            label="Requested Due Date *"
                             value={field.value}
                             onChange={field.onChange}
                             error={fieldState.error}
@@ -203,7 +203,7 @@ function Overview() {
             <RadioButtonGroup
                 control={control}
                 name='kittingRequired'
-                legend='Is kitting required?'
+                legend='Is kitting required? *'
                 options={kittingRequiredOptions}
                 rules={{ required: 'Select yes or no' }}
             />
@@ -212,8 +212,8 @@ function Overview() {
                 <Field>
                     <FieldLabel>
                         {kittingRequired === 'Yes'
-                            ? 'How many kits?'
-                            : 'How many units?'}
+                            ? 'How many kits? *'
+                            : 'How many units? *'}
                     </FieldLabel>
                     <FieldDescription>
                         If you need this job estimated at different quantities,

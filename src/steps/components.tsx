@@ -25,6 +25,7 @@ import {
     type FieldArrayWithId,
 } from 'react-hook-form'
 import type { FormValues, QtyTier } from '@/lib/form'
+import { Textarea } from '@/components/ui/textarea'
 
 // Displayed (and editable via the popover) when kitting isn't required: the
 // component's effective qty per overview quantity tier, pipe-delimited. Each
@@ -166,7 +167,7 @@ function ComponentCard({
 
     const watchedComponent = useWatch({ control, name: `components.${index}` })
     const kittingRequired = useWatch({ control, name: 'kittingRequired' })
-    const qtyLabel = kittingRequired === 'Yes' ? 'Qty per kit' : 'Qty'
+    const qtyLabel = kittingRequired === 'Yes' ? 'Qty per kit *' : 'Qty *'
     const overviewQtyTiers = useWatch({ control, name: 'qty' }) ?? []
 
     const fieldErrors = errors.components?.[index]
@@ -216,7 +217,7 @@ function ComponentCard({
                 <div className='flex gap-4'>
                     <Field>
                         <FieldLabel htmlFor={`components.${index}.name`}>
-                            Name
+                            Name *
                         </FieldLabel>
                         <Input
                             id={`components.${index}.name`}
@@ -304,7 +305,7 @@ function ComponentCard({
                 <RadioButtonGroup
                     control={control}
                     name={`components.${index}.source`}
-                    legend="Source"
+                    legend="Source *"
                     options={SOURCE_RADIO_OPTIONS}
                     rules={{ required: 'Source is required' }}
                     onValueChange={(value) => {
@@ -322,16 +323,33 @@ function ComponentCard({
                         <FieldLabel
                             htmlFor={`components.${index}.sourceJobNumber`}
                         >
-                            Job Number
+                            Job Number *
                         </FieldLabel>
                         <Input
                             id={`components.${index}.sourceJobNumber`}
                             {...register(
-                                `components.${index}.sourceJobNumber`,
+                                `components.${index}.sourceJobNumber`, { required: 'Job number is required for LCP Production components.' }
                             )}
                         />
+                        <FieldError errors={[fieldErrors?.sourceJobNumber]} />
                     </Field>
                 )}
+
+                <Field className=''>
+                    <FieldLabel
+                        htmlFor={`components.${index}.instruction`}
+                    >
+                        Instructions
+                    </FieldLabel>
+
+                    <Textarea
+                        id={`components.${index}.instruction`}
+                        {...register(
+                            `components.${index}.instruction`,
+                        )}
+                    />
+                    <FieldError errors={[fieldErrors?.instruction]} />
+                </Field>
 
                 <div className="flex justify-end pt-2">
                     <Button
@@ -425,6 +443,7 @@ function Components() {
                         qty: 1,
                         source: '',
                         sourceJobNumber: '',
+                        instruction: '',
                     })
                 }
             >
