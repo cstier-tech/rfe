@@ -16,6 +16,7 @@ import { RadioButtonGroup } from '@/components/ui/radio-button-group'
 const PACK_TYPES = [
     { label: 'Shrink Wrap', value: 'Shrink Wrap' },
     { label: 'Banded', value: 'Banded' },
+    { label: 'Convenient Cartons', value: 'Convenient Cartons' },
     { label: 'Other', value: 'Other' }
 ]
 
@@ -30,15 +31,17 @@ function Packs() {
     })
 
     // Which pack is expanded. Only one at a time; null means all collapsed.
-    const [openKey, setOpenKey] = useState<string | null>(
-        () => fields[0]?.id ?? null,
+    const [openKeys, setOpenKeys] = useState<Set<string>>(
+        () => new Set(fields[0] ? [fields[0].id] : []),
     )
-
     // When a pack is added, open it (and collapse the others).
     const prevLen = useRef(fields.length)
     useEffect(() => {
         if (fields.length > prevLen.current) {
-            setOpenKey(fields[fields.length - 1]?.id ?? null)
+            const newField = fields[fields.length - 1]
+            if (newField) {
+                setOpenKeys((prev) => new Set(prev).add(newField.id))
+            }
         }
         prevLen.current = fields.length
     }, [fields])
@@ -49,7 +52,7 @@ function Packs() {
 
     return (
         <div className="flex flex-col gap-4">
-            <Controller
+            {/* <Controller
                 control={control}
                 name="convenientCartons"
                 defaultValue={false}
@@ -65,7 +68,7 @@ function Packs() {
                         </FieldLabel>
                     </Field>
                 )}
-            />
+            /> */}
 
             {fields.length === 0 && (
                 <p className="text-sm text-muted-foreground">No packs yet.</p>
@@ -76,9 +79,17 @@ function Packs() {
                     key={field.id}
                     packIndex={packIndex}
                     components={components}
-                    open={openKey === field.id}
+                    open={openKeys.has(field.id)}
                     onOpenChange={(open) =>
-                        setOpenKey(open ? field.id : null)
+                        setOpenKeys((prev) => {
+                            const next = new Set(prev)
+                            if (open) {
+                                next.add(field.id)
+                            } else {
+                                next.delete(field.id)
+                            }
+                            return next
+                        })
                     }
                     onRemove={() => remove(packIndex)}
                 />
@@ -127,6 +138,14 @@ function PackCard({
         const valid = new Set(componentIdsKey ? componentIdsKey.split(',') : [])
         for (let i = items.length - 1; i >= 0; i--) {
             if (!valid.has(items[i].componentId)) removeItem(i)
+        }
+        // Add items for any component not yet in this pack, so everything
+        // starts selected by default.
+        const existingIds = new Set(items.map((it) => it.componentId))
+        for (const component of components) {
+            if (!existingIds.has(component.id)) {
+                appendItem({ componentId: component.id, qtyPerPack: 1 })
+            }
         }
         // Intentionally keyed only on componentIdsKey: `items` changes on every
         // field-array edit, and re-running then would fight the user's typing.
@@ -275,7 +294,7 @@ type ComponentRowProps = {
 function ComponentRow({
     packIndex,
     itemIndex,
-    
+
     label,
     source,
     onToggle,
@@ -286,7 +305,9 @@ function ComponentRow({
         formState: { errors },
     } = useFormContext<FormValues>()
 
+
     const selected = itemIndex !== -1
+    // const selected = itemIndex === -1
     const qtyError = selected
         ? errors.packs?.[packIndex]?.items?.[itemIndex]?.qtyPerPack
         : undefined

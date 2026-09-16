@@ -52,7 +52,7 @@ const STEPS: Step[] = [
     title: 'Packs',
     description: 'How will the components in this job be packed?',
     Component: Packs,
-    fields: ['convenientCartons', 'packs'],
+    fields: ['packs'],
   },
   {
     title: 'Shipping',
@@ -76,7 +76,7 @@ const STEPS: Step[] = [
 // means the user typed a custom "Other" value on save — since that value is
 // folded straight into `pack_type` (there's no separate stored column for
 // it), the only way back is to treat anything unrecognized as "Other" text.
-const KNOWN_PACK_TYPES = ['Shrink Wrap', 'Banded', 'Other']
+const KNOWN_PACK_TYPES = ['Shrink Wrap', 'Banded', 'Convenient Cartons', 'Other']
 
 const defaultComponent = () => ({
   id: crypto.randomUUID(),
@@ -91,6 +91,14 @@ const defaultComponent = () => ({
   instruction: '',
   type: '',
   otherType: '',
+})
+
+
+const defaultPack = () => ({
+  id: crypto.randomUUID(),
+  type: '',
+  qty: 1,
+  items: [],
 })
 
 // A fully-specified blank form, explicitly clearing every field rather than
@@ -113,8 +121,8 @@ const blankFormValues = (): FormValues => ({
   kittingRequired: undefined,
   qty: [{}],
   components: [defaultComponent()],
-  convenientCartons: false,
-  packs: [],
+  // convenientCartons: false,
+  packs: [defaultPack()],
   totalShipments: undefined,
   shipMethod: undefined,
   asnRequired: false,
@@ -292,7 +300,7 @@ function RfeForm() {
             ? quantities.map((q) => ({ qty: q.quantity ?? undefined }))
             : [{}],
         components: newComponents.length > 0 ? newComponents : [defaultComponent()],
-        convenientCartons: latestVersion.convenient_cartons ?? false,
+        // convenientCartons: latestVersion.convenient_cartons ?? false,
         packs: packs.map((pack) => {
           const rawType = pack.pack_type ?? ''
           const isKnownType = KNOWN_PACK_TYPES.includes(rawType)
@@ -409,7 +417,7 @@ function RfeForm() {
         changes_from_prev: data.changesFromPrev,
         // version_type: data.,
         kitting_required: data.kittingRequired,
-        convenient_cartons: data.convenientCartons,
+        // convenient_cartons: data.convenientCartons,
         num_of_shipments: data.totalShipments,
         asn_required: data.asnRequired,
         asn_instructions: data.asnInstructions,

@@ -145,6 +145,65 @@ const TYPE_OPTIONS = [
     { label: 'Other', value: 'Other' },
 ]
 
+function CardShell({
+    collapsible,
+    dragEnabled,
+    isOpen,
+    onOpenChange,
+    header,
+    children,
+    index,
+    field,
+}: {
+    collapsible: boolean
+    field: FieldArrayWithId<FormValues, 'components', 'id'>
+    index: number
+    dragEnabled: boolean
+    isOpen: boolean
+    onOpenChange: (open: boolean) => void
+    header: (handleRef: (el: HTMLElement | null) => void) => React.ReactNode
+    children: React.ReactNode
+}) {
+
+    // const displayName = watchedComponent?.name?.trim() || `Component ${index + 1}`
+    const { ref, handleRef, isDragging } = useSortable({
+        id: field.id,
+        index,
+        disabled: !dragEnabled,
+    })
+    if (collapsible) {
+        return (
+            <Collapsible
+                ref={ref}
+                open={isOpen}
+                onOpenChange={onOpenChange}
+                className={`rounded-lg border border-border bg-gray-50 ${isDragging ? 'opacity-50' : ''
+                    }`}
+            >
+                <div className="flex items-center justify-between gap-2 p-3">
+                    {header(handleRef)}
+                </div>
+                <CollapsibleContent className="flex flex-col gap-2 p-3 pt-0">
+                    {children}
+                </CollapsibleContent>
+            </Collapsible>
+        )
+    }
+    return (
+        <div
+            ref={ref}
+            className={`rounded-lg border border-border bg-gray-50 ${isDragging ? 'opacity-50' : ''}`}
+        >
+            <div className="flex items-center justify-between gap-2 p-3">
+                {header(handleRef)}
+            </div>
+            <div className="flex flex-col gap-2 p-3 pt-0">
+                {children}
+            </div>
+        </div>
+    )
+}
+
 function ComponentCard({
     field,
     index,
@@ -159,6 +218,7 @@ function ComponentCard({
     isOpen: boolean
     onOpenChange: (open: boolean) => void
     remove: (index: number) => void
+
 }) {
     const {
         register,
@@ -167,11 +227,11 @@ function ComponentCard({
         formState: { errors },
     } = useFormContext<FormValues>()
 
-    const { ref, handleRef, isDragging } = useSortable({
-        id: field.id,
-        index,
-        disabled: !dragEnabled,
-    })
+    // const { ref, handleRef, isDragging } = useSortable({
+    //     id: field.id,
+    //     index,
+    //     disabled: !dragEnabled,
+    // })
 
     const watchedComponent = useWatch({ control, name: `components.${index}` })
     const kittingRequired = useWatch({ control, name: 'kittingRequired' })
@@ -181,44 +241,48 @@ function ComponentCard({
     const fieldErrors = errors.components?.[index]
     const hasErrors = !!fieldErrors && Object.keys(fieldErrors).length > 0
     const displayName = watchedComponent?.name?.trim() || `Component ${index + 1}`
+    const collapsible = kittingRequired === 'Yes'
 
 
     return (
-        <Collapsible
-            ref={ref}
-            open={isOpen}
+        <CardShell
+        dragEnabled={dragEnabled}
+            field={field}
+            index={index}
+            collapsible={collapsible}
+            isOpen={isOpen}
             onOpenChange={onOpenChange}
-            className={`rounded-lg border border-border bg-gray-50 ${isDragging ? 'opacity-50' : ''
-                }`}
-        >
-            <div className="flex items-center justify-between gap-2 p-3">
-                <CollapsibleTrigger
-                    className={`flex flex-1 items-center gap-2 text-left text-sm font-medium [&[data-state=open]>svg]:rotate-90 ${hasErrors ? 'text-destructive' : ''
-                        }`}
-                >
-                    <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform" />
-                    <span className="truncate">{displayName}</span>
-                </CollapsibleTrigger>
-                {/* Always mounted (even when disabled) so dnd-kit attaches its
+            header={(handleRef) => collapsible
+                ? (<>
+                    <CollapsibleTrigger
+                        className={`flex flex-1 items-center gap-2 text-left text-sm font-medium [&[data-state=open]>svg]:rotate-90 ${hasErrors ? 'text-destructive' : ''
+                            }`}
+                    >
+                        <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform" />
+                        <span className="truncate">{displayName}</span>
+                    </CollapsibleTrigger>
+                    {/* Always mounted (even when disabled) so dnd-kit attaches its
                     drag-activator role/ARIA attributes to this handle from
                     the start, rather than briefly to the whole card and
                     leaving them stranded there once a handle appears. */}
-                <Button
-                    ref={handleRef}
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    className={`cursor-grab touch-none active:cursor-grabbing ${dragEnabled ? '' : 'invisible'
-                        }`}
-                    tabIndex={dragEnabled ? 0 : -1}
-                    aria-hidden={!dragEnabled}
-                    aria-label="Drag to reorder"
-                >
-                    <GripVerticalIcon />
-                </Button>
-            </div>
-
-            <CollapsibleContent className="flex flex-col gap-2 p-3 pt-0">
+                    <Button
+                        ref={handleRef}
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className={`cursor-grab touch-none active:cursor-grabbing ${dragEnabled ? '' : 'invisible'
+                            }`}
+                        tabIndex={dragEnabled ? 0 : -1}
+                        aria-hidden={!dragEnabled}
+                        aria-label="Drag to reorder"
+                    >
+                        <GripVerticalIcon />
+                    </Button>
+                </>)
+                : ''
+            }
+        >
+            {<>
                 <input
                     type="hidden"
                     {...register(`components.${index}.id`)}
@@ -280,16 +344,6 @@ function ComponentCard({
                 />
 
                 {(watchedComponent?.type === 'Other') &&
-                    // <Field>
-                    //     <FieldLabel>Specify Other *</FieldLabel>
-                    //     <Input
-                    //         id={`components.${index}.otherType`}
-                    //         {...register(`components.${index}.otherType`, {
-                    //             required: 'Other type is required',
-                    //         })}
-                    //     />
-                    //     <FieldError errors={[fieldErrors?.otherType]} />
-                    // </Field>
 
                     <Field className='max-w-64'>
                         <FieldLabel
@@ -410,18 +464,20 @@ function ComponentCard({
                     <FieldError errors={[fieldErrors?.instruction]} />
                 </Field>
 
-                <div className="flex justify-end pt-2">
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => remove(index)}
-                    >
-                        Remove
-                    </Button>
-                </div>
-            </CollapsibleContent>
-        </Collapsible>
+                {kittingRequired === 'Yes' &&
+                    <div className="flex justify-end pt-2">
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => remove(index)}
+                        >
+                            Remove
+                        </Button>
+                    </div>
+                }
+            </>}
+        </CardShell>
     )
 }
 
@@ -448,6 +504,8 @@ function Components() {
     }, [fields])
 
     const dragEnabled = fields.length > 1
+
+    const kittingRequired = useWatch({ control, name: 'kittingRequired' })
 
     return (
         <div className="flex flex-col gap-4">
@@ -488,28 +546,32 @@ function Components() {
                 ))}
             </DragDropProvider>
 
-            <Button
-                type="button"
-                variant="outline"
-                onClick={() =>
-                    append({
-                        id: crypto.randomUUID(),
-                        name: `Component ${fields.length + 1}`,
-                        finalSize: '',
-                        flatSize: '',
-                        stock: '',
-                        coating: '',
-                        qty: 1,
-                        source: '',
-                        sourceJobNumber: '',
-                        instruction: '',
-                        type: '',
-                        otherType: '',
-                    })
-                }
-            >
-                Add component
-            </Button>
+            {kittingRequired === 'Yes' &&
+                <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() =>
+                        append({
+                            id: crypto.randomUUID(),
+                            name: `Component ${fields.length + 1}`,
+                            finalSize: '',
+                            flatSize: '',
+                            stock: '',
+                            coating: '',
+                            qty: 1,
+                            source: '',
+                            sourceJobNumber: '',
+                            instruction: '',
+                            type: '',
+                            otherType: '',
+                        })
+                    }
+                >
+                    Add component
+                </Button>
+            }
+
+
         </div>
     )
 }

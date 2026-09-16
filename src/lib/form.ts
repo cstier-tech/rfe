@@ -66,7 +66,7 @@ export type FormValues = {
   kittingRequired?: 'Yes' | 'No'
   qty?: QtyTier[]
   components: ComponentItem[]
-  convenientCartons?: boolean
+  // convenientCartons?: boolean
   packs: Pack[]
 
   // Shipping
