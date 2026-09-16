@@ -137,6 +137,14 @@ const SOURCE_RADIO_OPTIONS = SOURCE_OPTIONS.map((option) => ({
     value: option,
 }))
 
+const TYPE_OPTIONS = [
+    { label: 'Printed', value: 'Printed' },
+    { label: 'Promo', value: 'Promo' },
+    { label: 'Apparel', value: 'Apparel' },
+    { label: 'Product Sample', value: 'Product Sample' },
+    { label: 'Other', value: 'Other' },
+]
+
 function ComponentCard({
     field,
     index,
@@ -173,6 +181,7 @@ function ComponentCard({
     const fieldErrors = errors.components?.[index]
     const hasErrors = !!fieldErrors && Object.keys(fieldErrors).length > 0
     const displayName = watchedComponent?.name?.trim() || `Component ${index + 1}`
+
 
     return (
         <Collapsible
@@ -254,53 +263,103 @@ function ComponentCard({
                     )}
                 </div>
 
-                <div className='flex gap-4'>
-                    <Field>
-                        <FieldLabel htmlFor={`components.${index}.finalSize`}>
-                            Finished Size
-                        </FieldLabel>
-                        <Input
-                            id={`components.${index}.finalSize`}
-                            {...register(`components.${index}.finalSize`)}
-                        />
-                        <FieldError errors={[fieldErrors?.finalSize]} />
-                    </Field>
+                <RadioButtonGroup
+                    control={control}
+                    name={`components.${index}.type`}
+                    legend="Component Type *"
+                    options={TYPE_OPTIONS}
+                    rules={{ required: 'Type is required' }}
+                    onValueChange={(value) => {
+                        if (value !== 'Other') {
+                            setValue(
+                                `components.${index}.otherType`,
+                                '',
+                            )
+                        }
+                    }}
+                />
 
-                    <Field>
-                        <FieldLabel htmlFor={`components.${index}.flatSize`}>
-                            Flat Size
-                        </FieldLabel>
-                        <Input
-                            id={`components.${index}.flatSize`}
-                            {...register(`components.${index}.flatSize`)}
-                        />
-                        <FieldError errors={[fieldErrors?.flatSize]} />
-                    </Field>
-                </div>
+                {(watchedComponent?.type === 'Other') &&
+                    // <Field>
+                    //     <FieldLabel>Specify Other *</FieldLabel>
+                    //     <Input
+                    //         id={`components.${index}.otherType`}
+                    //         {...register(`components.${index}.otherType`, {
+                    //             required: 'Other type is required',
+                    //         })}
+                    //     />
+                    //     <FieldError errors={[fieldErrors?.otherType]} />
+                    // </Field>
 
-                <div className='flex gap-4'>
-                    <Field>
-                        <FieldLabel htmlFor={`components.${index}.stock`}>
-                            Stock
+                    <Field className='max-w-64'>
+                        <FieldLabel
+                            htmlFor={`components.${index}.otherType`}
+                        >
+                            Specify Other *
                         </FieldLabel>
                         <Input
-                            id={`components.${index}.stock`}
-                            {...register(`components.${index}.stock`)}
+                            id={`components.${index}.otherType`}
+                            {...register(
+                                `components.${index}.otherType`, { required: 'Other type is required.' }
+                            )}
                         />
-                        <FieldError errors={[fieldErrors?.stock]} />
+                        <FieldError errors={[fieldErrors?.otherType]} />
                     </Field>
+                }
 
-                    <Field>
-                        <FieldLabel htmlFor={`components.${index}.coating`}>
-                            Coating
-                        </FieldLabel>
-                        <Input
-                            id={`components.${index}.coating`}
-                            {...register(`components.${index}.coating`)}
-                        />
-                        <FieldError errors={[fieldErrors?.coating]} />
-                    </Field>
-                </div>
+                {watchedComponent?.type === "Printed" &&
+                    <>
+                        <div className='flex gap-4'>
+                            <Field>
+                                <FieldLabel htmlFor={`components.${index}.finalSize`}>
+                                    Finished Size
+                                </FieldLabel>
+                                <Input
+                                    id={`components.${index}.finalSize`}
+                                    {...register(`components.${index}.finalSize`)}
+                                />
+                                <FieldError errors={[fieldErrors?.finalSize]} />
+                            </Field>
+
+                            <Field>
+                                <FieldLabel htmlFor={`components.${index}.flatSize`}>
+                                    Flat Size
+                                </FieldLabel>
+                                <Input
+                                    id={`components.${index}.flatSize`}
+                                    {...register(`components.${index}.flatSize`)}
+                                />
+                                <FieldError errors={[fieldErrors?.flatSize]} />
+                            </Field>
+                        </div>
+
+                        <div className='flex gap-4'>
+                            <Field>
+                                <FieldLabel htmlFor={`components.${index}.stock`}>
+                                    Stock
+                                </FieldLabel>
+                                <Input
+                                    id={`components.${index}.stock`}
+                                    {...register(`components.${index}.stock`)}
+                                />
+                                <FieldError errors={[fieldErrors?.stock]} />
+                            </Field>
+
+                            <Field>
+                                <FieldLabel htmlFor={`components.${index}.coating`}>
+                                    Coating
+                                </FieldLabel>
+                                <Input
+                                    id={`components.${index}.coating`}
+                                    {...register(`components.${index}.coating`)}
+                                />
+                                <FieldError errors={[fieldErrors?.coating]} />
+                            </Field>
+                        </div>
+                    </>
+                }
+
+
 
                 <RadioButtonGroup
                     control={control}
@@ -444,6 +503,8 @@ function Components() {
                         source: '',
                         sourceJobNumber: '',
                         instruction: '',
+                        type: '',
+                        otherType: '',
                     })
                 }
             >

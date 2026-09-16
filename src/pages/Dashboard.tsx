@@ -42,6 +42,8 @@ type ComponentRow = {
   quantity: string | null
   source: string | null
   sort_order: string | null
+  type: string | null
+  other_type: string | null
 }
 
 type PackRow = {

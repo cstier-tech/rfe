@@ -24,6 +24,9 @@ export type ComponentItem = {
   sourceJobNumber: string
 
   instruction: string
+
+  type: string
+  otherType: string
 }
 
 export type PackItem = {

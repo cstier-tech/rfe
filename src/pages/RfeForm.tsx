@@ -89,6 +89,8 @@ const defaultComponent = () => ({
   source: '' as ComponentSource,
   sourceJobNumber: '',
   instruction: '',
+  type: '',
+  otherType: '',
 })
 
 // A fully-specified blank form, explicitly clearing every field rather than
@@ -237,6 +239,8 @@ function RfeForm() {
           source: (component.source ?? '') as ComponentSource,
           sourceJobNumber: component.job_number ?? '',
           instruction: component.instruction ?? '',
+          type: component.type ?? '',
+          otherType: component.other_type ?? '',
         }
 
         if (kittingRequired !== 'No') {
@@ -437,6 +441,8 @@ function RfeForm() {
         source: component.source,
         sort_order: String(index),
         instruction: component.instruction,
+        type: component.type,
+        other_type: component.otherType,
       })),
     )
 
@@ -491,7 +497,7 @@ function RfeForm() {
 
     if (quantitiesError) console.error(quantitiesError)
 
-    if (isEditing || isDuplicating) navigate('/dashboard')
+    navigate('/dashboard')
   }
 
   const next = async () => {
@@ -541,7 +547,9 @@ function RfeForm() {
                   )
                 ) {
                   e.preventDefault()
+                  
                 }
+                // navigate("/dashboard", { replace: true });
               }}
               className="flex flex-col gap-4"
             >

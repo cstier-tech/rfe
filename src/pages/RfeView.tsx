@@ -40,6 +40,8 @@ type ComponentRow = {
   source: string | null
   job_number: string | null
   sort_order: string | null
+  type: string | null
+  other_type: string | null
 }
 
 type PackRow = {
