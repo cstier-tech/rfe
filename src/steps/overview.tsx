@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useFormContext, Controller, useWatch, useFieldArray } from 'react-hook-form'
 import type { FormValues } from '@/lib/form'
+import { Check } from "lucide-react"
 
 const kittingRequiredOptions = [
     { label: 'No', value: 'No' },
@@ -95,6 +96,7 @@ function Overview() {
 
     return (
         <div className="flex flex-col gap-4">
+
             <div className="flex gap-4">
                 <Field className='w-full'>
                     <FieldLabel htmlFor="name">RFE Name *</FieldLabel>

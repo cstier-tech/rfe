@@ -216,7 +216,7 @@ function Dashboard() {
   }
 
   return (
-    <div className="min-h-svh p-4 pt-16 bg-gray-100">
+    <div className="min-h-svh p-4 pt-16">
       <div className="mx-auto max-w-5xl">
         <h1 className="mb-4 text-lg font-semibold">RFEs</h1>
 
@@ -313,6 +313,8 @@ function Dashboard() {
                           <TableCell colSpan={7} className="whitespace-normal bg-muted/30">
                             <div className="flex flex-col gap-4 p-2">
                               <DetailTable
+                                bgColor='bg-sky-600/3'
+                                borderColor='border-sky-950/20'
                                 title="Versions"
                                 rows={versionsByRfe.get(rfe.rfe_id) ?? []}
                                 columns={[
@@ -328,6 +330,8 @@ function Dashboard() {
                                 ]}
                               />
                               <DetailTable
+                                bgColor='bg-orange-600/3'
+                                borderColor='border-orange-950/20'
                                 title="Quantities"
                                 rows={quantitiesByVersion.get(rfe.id) ?? []}
                                 columns={[
@@ -335,6 +339,8 @@ function Dashboard() {
                                 ]}
                               />
                               <DetailTable
+                                bgColor='bg-purple-600/3'
+                                borderColor='border-purple-950/20'
                                 title="Components"
                                 rows={componentsByVersion.get(rfe.id) ?? []}
                                 columns={[
@@ -377,10 +383,14 @@ function DetailTable<T extends { id: string | number }>({
   title,
   rows,
   columns,
+  borderColor,
+  bgColor
 }: {
   title: string
   rows: T[]
   columns: Column<T>[]
+  borderColor?: string
+  bgColor?: string
 }) {
   return (
     <div>
@@ -388,18 +398,18 @@ function DetailTable<T extends { id: string | number }>({
       {rows.length === 0 ? (
         <p className="text-xs text-muted-foreground">None</p>
       ) : (
-        <div className="rounded-md border bg-background">
-          <Table>
-            <TableHeader>
-              <TableRow>
+        <div className={`rounded-sm border ${bgColor} ${borderColor}`} >
+          <Table className={borderColor}>
+            <TableHeader className={borderColor}>
+              <TableRow className={borderColor}>
                 {columns.map((col) => (
-                  <TableHead key={col.label}>{col.label}</TableHead>
+                  <TableHead className={borderColor} key={col.label}>{col.label}</TableHead>
                 ))}
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.map((row) => (
-                <TableRow key={row.id}>
+                <TableRow className={borderColor} key={row.id}>
                   {columns.map((col) => (
                     <TableCell key={col.label}>{col.render(row)}</TableCell>
                   ))}
@@ -428,7 +438,7 @@ function PacksDetail({
       {packs.length === 0 ? (
         <p className="text-xs text-muted-foreground">None</p>
       ) : (
-        <div className="flex flex-col gap-3 rounded-md border bg-background p-2">
+        <div className="flex flex-col gap-3 rounded-sm border bg-green-600/3 border-green-950/20 p-2">
           {packs.map((pack, i) => (
             <div key={pack.id} className="flex flex-col gap-0.5 text-sm">
               <p className="font-medium">

@@ -28,7 +28,7 @@ function FieldLegend({
       data-slot="field-legend"
       data-variant={variant}
       className={cn(
-        "mb-1.5 font-medium data-[variant=label]:text-sm data-[variant=legend]:text-base",
+        "mb-1.5 font-medium data-[variant=label]:text-sm data-[variant=legend]:text-sm",
         className
       )}
       {...props}
@@ -50,7 +50,7 @@ function FieldGroup({ className, ...props }: React.ComponentProps<"div">) {
 }
 
 const fieldVariants = cva(
-  "group/field flex gap-2 data-[invalid=true]:text-destructive",
+  "group/field flex gap-1.5 data-[invalid=true]:text-destructive",
   {
     variants: {
       orientation: {
@@ -59,7 +59,7 @@ const fieldVariants = cva(
           "flex-row items-center w-full has-[>[data-slot=field-content]]:items-start *:data-[slot=field-label]:flex-auto has-[>[data-slot=field-content]]:[&>[role=checkbox],[role=radio]]:mt-px",
         responsive:
           "flex-col w-full *:w-full @md/field-group:flex-row @md/field-group:items-center @md/field-group:*:w-auto @md/field-group:has-[>[data-slot=field-content]]:items-start @md/field-group:*:data-[slot=field-label]:flex-auto [&>.sr-only]:w-auto @md/field-group:has-[>[data-slot=field-content]]:[&>[role=checkbox],[role=radio]]:mt-px",
-        radiobutton: 'bg-white flex-row items-center has-[>[data-slot=field-content]]:items-start *:data-[slot=field-label]:flex-auto has-[>[data-slot=field-content]]:[&>[role=checkbox],[role=radio]]:mt-px border rounded-lg pr-3 cursor-pointer has-data-checked:bg-muted has-data-checked:border-primary/20 dark:hover:bg-input/50'
+        radiobutton: 'bg-white flex-row items-center has-[>[data-slot=field-content]]:items-start *:data-[slot=field-label]:flex-auto has-[>[data-slot=field-content]]:[&>[role=checkbox],[role=radio]]:mt-px border rounded-lg pr-3 cursor-pointer has-data-checked:bg-lcp-secondary-lightblue/15 has-data-checked:border-primary/50 dark:hover:bg-input/50'
       },
     },
     defaultVariants: {
