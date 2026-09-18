@@ -178,16 +178,16 @@ function ComponentCard({
             ref={ref}
             open={isOpen}
             onOpenChange={onOpenChange}
-            className={`rounded-lg border border-border bg-gray-50 ${isDragging ? 'opacity-50' : ''
+            className={`rounded-lg border border-cyan-950/20 bg-cyan-600/3 ${isDragging ? 'opacity-50' : ''
                 }`}
         >
             <div className="flex items-center justify-between gap-2 p-3">
                 <CollapsibleTrigger
-                    className={`flex flex-1 items-center gap-2 text-left text-sm font-medium [&[data-state=open]>svg]:rotate-90 ${hasErrors ? 'text-destructive' : ''
+                    className={`flex flex-1 items-center gap-2 text-left font-medium [&[data-state=open]>svg]:rotate-90 ${hasErrors ? 'text-destructive' : ''
                         }`}
                 >
                     <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform" />
-                    <span className="truncate">{displayName}</span>
+                    <span className="truncate font-semibold">{displayName}</span>
                 </CollapsibleTrigger>
                 {/* Always mounted (even when disabled) so dnd-kit attaches its
                     drag-activator role/ARIA attributes to this handle from
@@ -336,7 +336,7 @@ function ComponentCard({
                 <div className="flex justify-end pt-2">
                     <Button
                         type="button"
-                        variant="ghost"
+                        variant="destructive"
                         size="sm"
                         onClick={() => remove(index)}
                     >

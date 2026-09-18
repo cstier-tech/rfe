@@ -139,17 +139,17 @@ function PackCard({
         <Collapsible
             open={open}
             onOpenChange={onOpenChange}
-            className="rounded-lg border border-border bg-gray-50"
+            className="rounded-lg border border-cyan-950/20 bg-cyan-600/3"
         >
             <div className="flex items-center justify-between gap-2 p-3">
                 <CollapsibleTrigger
-                    className={`flex flex-1 items-center gap-2 text-left text-sm font-medium [&[data-state=open]>svg]:rotate-90 ${hasErrors ? 'text-destructive' : ''
+                    className={`flex flex-1 items-center gap-2 text-left text-sm font-semibold [&[data-state=open]>svg]:rotate-90 ${hasErrors ? 'text-destructive' : ''
                         }`}
                 >
                     <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform" />
                     Pack {packIndex + 1}
                 </CollapsibleTrigger>
-                <Button type="button" variant="ghost" size="sm" onClick={onRemove}>
+                <Button type="button" variant="destructive" size="sm" onClick={onRemove}>
                     Remove
                 </Button>
             </div>

@@ -501,14 +501,14 @@ function RfeForm() {
 
   if (loading) {
     return (
-      <div className="flex min-h-svh items-center justify-center p-4 bg-gray-100">
+      <div className="flex min-h-svh items-center justify-center p-4 bg-taupe-100">
         <p className="text-sm text-muted-foreground">Loading RFE…</p>
       </div>
     )
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center p-4 bg-gray-100">
+    <div className="flex min-h-svh items-center justify-center py-20 bg-taupe-100">
       <Card className="w-full max-w-2xl">
         <CardHeader>
           <CardTitle>{step.title}</CardTitle>
