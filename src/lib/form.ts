@@ -22,6 +22,11 @@ export type ComponentItem = {
   source: ComponentSource
   // Only meaningful when source === 'LCP Production'.
   sourceJobNumber: string
+
+  instruction: string
+
+  type: string
+  otherType: string
 }
 
 export type PackItem = {
@@ -61,7 +66,7 @@ export type FormValues = {
   kittingRequired?: 'Yes' | 'No'
   qty?: QtyTier[]
   components: ComponentItem[]
-  convenientCartons?: boolean
+  // convenientCartons?: boolean
   packs: Pack[]
 
   // Shipping

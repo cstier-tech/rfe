@@ -25,6 +25,7 @@ import {
     type FieldArrayWithId,
 } from 'react-hook-form'
 import type { FormValues, QtyTier } from '@/lib/form'
+import { Textarea } from '@/components/ui/textarea'
 
 // Displayed (and editable via the popover) when kitting isn't required: the
 // component's effective qty per overview quantity tier, pipe-delimited. Each
@@ -136,6 +137,73 @@ const SOURCE_RADIO_OPTIONS = SOURCE_OPTIONS.map((option) => ({
     value: option,
 }))
 
+const TYPE_OPTIONS = [
+    { label: 'Printed', value: 'Printed' },
+    { label: 'Promo', value: 'Promo' },
+    { label: 'Apparel', value: 'Apparel' },
+    { label: 'Product Sample', value: 'Product Sample' },
+    { label: 'Other', value: 'Other' },
+]
+
+function CardShell({
+    collapsible,
+    dragEnabled,
+    isOpen,
+    onOpenChange,
+    header,
+    children,
+    index,
+    field,
+}: {
+    collapsible: boolean
+    field: FieldArrayWithId<FormValues, 'components', 'id'>
+    index: number
+    dragEnabled: boolean
+    isOpen: boolean
+    onOpenChange: (open: boolean) => void
+    header: (handleRef: (el: HTMLElement | null) => void) => React.ReactNode
+    children: React.ReactNode
+}) {
+
+    // const displayName = watchedComponent?.name?.trim() || `Component ${index + 1}`
+    const { ref, handleRef, isDragging } = useSortable({
+        id: field.id,
+        index,
+        disabled: !dragEnabled,
+    })
+    if (collapsible) {
+        return (
+            <Collapsible
+                ref={ref}
+                open={isOpen}
+                onOpenChange={onOpenChange}
+                className={`rounded-lg border border-border bg-gray-50 ${isDragging ? 'opacity-50' : ''
+                    }`}
+            >
+                <div className="flex items-center justify-between gap-2 p-3">
+                    {header(handleRef)}
+                </div>
+                <CollapsibleContent className="flex flex-col gap-2 p-3 pt-0">
+                    {children}
+                </CollapsibleContent>
+            </Collapsible>
+        )
+    }
+    return (
+        <div
+            ref={ref}
+            className={`rounded-lg border border-border bg-gray-50 ${isDragging ? 'opacity-50' : ''}`}
+        >
+            <div className="flex items-center justify-between gap-2 p-3">
+                {header(handleRef)}
+            </div>
+            <div className="flex flex-col gap-2 p-3 pt-0">
+                {children}
+            </div>
+        </div>
+    )
+}
+
 function ComponentCard({
     field,
     index,
@@ -150,6 +218,7 @@ function ComponentCard({
     isOpen: boolean
     onOpenChange: (open: boolean) => void
     remove: (index: number) => void
+
 }) {
     const {
         register,
@@ -158,57 +227,62 @@ function ComponentCard({
         formState: { errors },
     } = useFormContext<FormValues>()
 
-    const { ref, handleRef, isDragging } = useSortable({
-        id: field.id,
-        index,
-        disabled: !dragEnabled,
-    })
+    // const { ref, handleRef, isDragging } = useSortable({
+    //     id: field.id,
+    //     index,
+    //     disabled: !dragEnabled,
+    // })
 
     const watchedComponent = useWatch({ control, name: `components.${index}` })
     const kittingRequired = useWatch({ control, name: 'kittingRequired' })
-    const qtyLabel = kittingRequired === 'Yes' ? 'Qty per kit' : 'Qty'
+    const qtyLabel = kittingRequired === 'Yes' ? 'Qty per kit *' : 'Qty *'
     const overviewQtyTiers = useWatch({ control, name: 'qty' }) ?? []
 
     const fieldErrors = errors.components?.[index]
     const hasErrors = !!fieldErrors && Object.keys(fieldErrors).length > 0
     const displayName = watchedComponent?.name?.trim() || `Component ${index + 1}`
+    const collapsible = kittingRequired === 'Yes'
+
 
     return (
-        <Collapsible
-            ref={ref}
-            open={isOpen}
+        <CardShell
+        dragEnabled={dragEnabled}
+            field={field}
+            index={index}
+            collapsible={collapsible}
+            isOpen={isOpen}
             onOpenChange={onOpenChange}
-            className={`rounded-lg border border-cyan-950/20 bg-cyan-600/3 ${isDragging ? 'opacity-50' : ''
-                }`}
-        >
-            <div className="flex items-center justify-between gap-2 p-3">
-                <CollapsibleTrigger
-                    className={`flex flex-1 items-center gap-2 text-left font-medium [&[data-state=open]>svg]:rotate-90 ${hasErrors ? 'text-destructive' : ''
-                        }`}
-                >
-                    <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform" />
-                    <span className="truncate font-semibold">{displayName}</span>
-                </CollapsibleTrigger>
-                {/* Always mounted (even when disabled) so dnd-kit attaches its
+            header={(handleRef) => collapsible
+                ? (<>
+                    <CollapsibleTrigger
+                        className={`flex flex-1 items-center gap-2 text-left text-sm font-medium [&[data-state=open]>svg]:rotate-90 ${hasErrors ? 'text-destructive' : ''
+                            }`}
+                    >
+                        <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform" />
+                        <span className="truncate">{displayName}</span>
+                    </CollapsibleTrigger>
+                    {/* Always mounted (even when disabled) so dnd-kit attaches its
                     drag-activator role/ARIA attributes to this handle from
                     the start, rather than briefly to the whole card and
                     leaving them stranded there once a handle appears. */}
-                <Button
-                    ref={handleRef}
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    className={`cursor-grab touch-none active:cursor-grabbing ${dragEnabled ? '' : 'invisible'
-                        }`}
-                    tabIndex={dragEnabled ? 0 : -1}
-                    aria-hidden={!dragEnabled}
-                    aria-label="Drag to reorder"
-                >
-                    <GripVerticalIcon />
-                </Button>
-            </div>
-
-            <CollapsibleContent className="flex flex-col gap-2 p-3 pt-0">
+                    <Button
+                        ref={handleRef}
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className={`cursor-grab touch-none active:cursor-grabbing ${dragEnabled ? '' : 'invisible'
+                            }`}
+                        tabIndex={dragEnabled ? 0 : -1}
+                        aria-hidden={!dragEnabled}
+                        aria-label="Drag to reorder"
+                    >
+                        <GripVerticalIcon />
+                    </Button>
+                </>)
+                : ''
+            }
+        >
+            {<>
                 <input
                     type="hidden"
                     {...register(`components.${index}.id`)}
@@ -216,7 +290,7 @@ function ComponentCard({
                 <div className='flex gap-4'>
                     <Field>
                         <FieldLabel htmlFor={`components.${index}.name`}>
-                            Name
+                            Name *
                         </FieldLabel>
                         <Input
                             id={`components.${index}.name`}
@@ -253,58 +327,98 @@ function ComponentCard({
                     )}
                 </div>
 
-                <div className='flex gap-4'>
-                    <Field>
-                        <FieldLabel htmlFor={`components.${index}.finalSize`}>
-                            Finished Size
-                        </FieldLabel>
-                        <Input
-                            id={`components.${index}.finalSize`}
-                            {...register(`components.${index}.finalSize`)}
-                        />
-                        <FieldError errors={[fieldErrors?.finalSize]} />
-                    </Field>
+                <RadioButtonGroup
+                    control={control}
+                    name={`components.${index}.type`}
+                    legend="Component Type *"
+                    options={TYPE_OPTIONS}
+                    rules={{ required: 'Type is required' }}
+                    onValueChange={(value) => {
+                        if (value !== 'Other') {
+                            setValue(
+                                `components.${index}.otherType`,
+                                '',
+                            )
+                        }
+                    }}
+                />
 
-                    <Field>
-                        <FieldLabel htmlFor={`components.${index}.flatSize`}>
-                            Flat Size
-                        </FieldLabel>
-                        <Input
-                            id={`components.${index}.flatSize`}
-                            {...register(`components.${index}.flatSize`)}
-                        />
-                        <FieldError errors={[fieldErrors?.flatSize]} />
-                    </Field>
-                </div>
+                {(watchedComponent?.type === 'Other') &&
 
-                <div className='flex gap-4'>
-                    <Field>
-                        <FieldLabel htmlFor={`components.${index}.stock`}>
-                            Stock
+                    <Field className='max-w-64'>
+                        <FieldLabel
+                            htmlFor={`components.${index}.otherType`}
+                        >
+                            Specify Other *
                         </FieldLabel>
                         <Input
-                            id={`components.${index}.stock`}
-                            {...register(`components.${index}.stock`)}
+                            id={`components.${index}.otherType`}
+                            {...register(
+                                `components.${index}.otherType`, { required: 'Other type is required.' }
+                            )}
                         />
-                        <FieldError errors={[fieldErrors?.stock]} />
+                        <FieldError errors={[fieldErrors?.otherType]} />
                     </Field>
+                }
 
-                    <Field>
-                        <FieldLabel htmlFor={`components.${index}.coating`}>
-                            Coating
-                        </FieldLabel>
-                        <Input
-                            id={`components.${index}.coating`}
-                            {...register(`components.${index}.coating`)}
-                        />
-                        <FieldError errors={[fieldErrors?.coating]} />
-                    </Field>
-                </div>
+                {watchedComponent?.type === "Printed" &&
+                    <>
+                        <div className='flex gap-4'>
+                            <Field>
+                                <FieldLabel htmlFor={`components.${index}.finalSize`}>
+                                    Finished Size
+                                </FieldLabel>
+                                <Input
+                                    id={`components.${index}.finalSize`}
+                                    {...register(`components.${index}.finalSize`)}
+                                />
+                                <FieldError errors={[fieldErrors?.finalSize]} />
+                            </Field>
+
+                            <Field>
+                                <FieldLabel htmlFor={`components.${index}.flatSize`}>
+                                    Flat Size
+                                </FieldLabel>
+                                <Input
+                                    id={`components.${index}.flatSize`}
+                                    {...register(`components.${index}.flatSize`)}
+                                />
+                                <FieldError errors={[fieldErrors?.flatSize]} />
+                            </Field>
+                        </div>
+
+                        <div className='flex gap-4'>
+                            <Field>
+                                <FieldLabel htmlFor={`components.${index}.stock`}>
+                                    Stock
+                                </FieldLabel>
+                                <Input
+                                    id={`components.${index}.stock`}
+                                    {...register(`components.${index}.stock`)}
+                                />
+                                <FieldError errors={[fieldErrors?.stock]} />
+                            </Field>
+
+                            <Field>
+                                <FieldLabel htmlFor={`components.${index}.coating`}>
+                                    Coating
+                                </FieldLabel>
+                                <Input
+                                    id={`components.${index}.coating`}
+                                    {...register(`components.${index}.coating`)}
+                                />
+                                <FieldError errors={[fieldErrors?.coating]} />
+                            </Field>
+                        </div>
+                    </>
+                }
+
+
 
                 <RadioButtonGroup
                     control={control}
                     name={`components.${index}.source`}
-                    legend="Source"
+                    legend="Source *"
                     options={SOURCE_RADIO_OPTIONS}
                     rules={{ required: 'Source is required' }}
                     onValueChange={(value) => {
@@ -322,29 +436,48 @@ function ComponentCard({
                         <FieldLabel
                             htmlFor={`components.${index}.sourceJobNumber`}
                         >
-                            Job Number
+                            Job Number *
                         </FieldLabel>
                         <Input
                             id={`components.${index}.sourceJobNumber`}
                             {...register(
-                                `components.${index}.sourceJobNumber`,
+                                `components.${index}.sourceJobNumber`, { required: 'Job number is required for LCP Production components.' }
                             )}
                         />
+                        <FieldError errors={[fieldErrors?.sourceJobNumber]} />
                     </Field>
                 )}
 
-                <div className="flex justify-end pt-2">
-                    <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => remove(index)}
+                <Field className=''>
+                    <FieldLabel
+                        htmlFor={`components.${index}.instruction`}
                     >
-                        Remove
-                    </Button>
-                </div>
-            </CollapsibleContent>
-        </Collapsible>
+                        Instructions
+                    </FieldLabel>
+
+                    <Textarea
+                        id={`components.${index}.instruction`}
+                        {...register(
+                            `components.${index}.instruction`,
+                        )}
+                    />
+                    <FieldError errors={[fieldErrors?.instruction]} />
+                </Field>
+
+                {kittingRequired === 'Yes' &&
+                    <div className="flex justify-end pt-2">
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => remove(index)}
+                        >
+                            Remove
+                        </Button>
+                    </div>
+                }
+            </>}
+        </CardShell>
     )
 }
 
@@ -371,6 +504,8 @@ function Components() {
     }, [fields])
 
     const dragEnabled = fields.length > 1
+
+    const kittingRequired = useWatch({ control, name: 'kittingRequired' })
 
     return (
         <div className="flex flex-col gap-4">
@@ -411,25 +546,32 @@ function Components() {
                 ))}
             </DragDropProvider>
 
-            <Button
-                type="button"
-                variant="outline"
-                onClick={() =>
-                    append({
-                        id: crypto.randomUUID(),
-                        name: `Component ${fields.length + 1}`,
-                        finalSize: '',
-                        flatSize: '',
-                        stock: '',
-                        coating: '',
-                        qty: 1,
-                        source: '',
-                        sourceJobNumber: '',
-                    })
-                }
-            >
-                Add component
-            </Button>
+            {kittingRequired === 'Yes' &&
+                <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() =>
+                        append({
+                            id: crypto.randomUUID(),
+                            name: `Component ${fields.length + 1}`,
+                            finalSize: '',
+                            flatSize: '',
+                            stock: '',
+                            coating: '',
+                            qty: 1,
+                            source: '',
+                            sourceJobNumber: '',
+                            instruction: '',
+                            type: '',
+                            otherType: '',
+                        })
+                    }
+                >
+                    Add component
+                </Button>
+            }
+
+
         </div>
     )
 }

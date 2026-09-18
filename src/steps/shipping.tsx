@@ -29,7 +29,7 @@ function Shipping() {
         <div className="flex flex-col gap-4">
             <Field className="max-w-64">
                 <FieldLabel htmlFor="totalShipments">
-                    Total Number of Shipments
+                    Total Number of Shipments *
                 </FieldLabel>
                 <Input
                     id="totalShipments"
@@ -75,7 +75,7 @@ function Shipping() {
                 {asnRequired && (
                     <Field>
                         <FieldLabel htmlFor="asnInstructions">
-                            ASN Instructions
+                            ASN Instructions *
                         </FieldLabel>
                         <Textarea
                             id="asnInstructions"
@@ -142,7 +142,7 @@ function Shipping() {
                         <div className="flex gap-4">
                             <Field>
                                 <FieldLabel htmlFor="usnpcCode">
-                                    USNPC Code
+                                    USNPC Code *
                                 </FieldLabel>
                                 <Input
                                     id="usnpcCode"
@@ -154,7 +154,7 @@ function Shipping() {
                             </Field>
                             <Field>
                                 <FieldLabel htmlFor="customsValue">
-                                    Customs Value
+                                    Customs Value *
                                 </FieldLabel>
                                 <Input
                                     id="customsValue"
@@ -167,7 +167,7 @@ function Shipping() {
                         </div>
                         <Field>
                             <FieldLabel htmlFor="customsDescription">
-                                Customs Description
+                                Customs Description *
                             </FieldLabel>
                             <Textarea
                                 id="customsDescription"
@@ -182,7 +182,7 @@ function Shipping() {
                 <RadioButtonGroup
                     control={control}
                     name="shipMethod"
-                    legend="Shipment Method"
+                    legend="Shipment Method *"
                     options={SHIP_METHODS_RADIO_OPTIONS}
                     rules={{ required: 'Select a shipment method' }}
                 />
