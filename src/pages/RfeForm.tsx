@@ -7,6 +7,7 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
@@ -525,45 +526,51 @@ function RfeForm() {
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center py-20 bg-taupe-100">
-      <Card className="w-full max-w-2xl">
-        <CardHeader>
-          <CardTitle>{step.title}</CardTitle>
-          <CardDescription>{step.description}</CardDescription>
-          <p className="text-sm text-muted-foreground">
-            Step {stepIndex + 1} of {STEPS.length}
-          </p>
-        </CardHeader>
-        <CardContent>
-          <FormProvider {...methods}>
-            <form
-              onSubmit={methods.handleSubmit(onSubmit)}
-              // On the last step, a real submit button exists in the DOM,
-              // which makes the browser treat Enter inside any text input as
-              // an implicit submit — e.g. typing a number then hitting Enter
-              // on the very first Shipping field would submit the whole
-              // form. Only let Enter go through from the actual submit
-              // button (or a textarea, where it should insert a newline).
-              onKeyDown={(e) => {
-                if (
-                  e.key === 'Enter' &&
-                  e.target instanceof HTMLElement &&
-                  e.target.tagName !== 'TEXTAREA' &&
-                  !(
-                    e.target instanceof HTMLButtonElement &&
-                    e.target.type === 'submit'
-                  )
-                ) {
-                  e.preventDefault()
-                  
-                }
-                // navigate("/dashboard", { replace: true });
-              }}
-              className="flex flex-col gap-4"
-            >
-              <StepComponent />
+    <div className="flex min-h-svh items-center justify-center pt-20 pb-10 bg-taupe-100">
+      <Card className="w-full max-w-2xl relative">
 
-              <div className="flex justify-between gap-2">
+
+        <FormProvider {...methods}>
+          <form
+            onSubmit={methods.handleSubmit(onSubmit)}
+            // On the last step, a real submit button exists in the DOM,
+            // which makes the browser treat Enter inside any text input as
+            // an implicit submit — e.g. typing a number then hitting Enter
+            // on the very first Shipping field would submit the whole
+            // form. Only let Enter go through from the actual submit
+            // button (or a textarea, where it should insert a newline).
+            onKeyDown={(e) => {
+              if (
+                e.key === 'Enter' &&
+                e.target instanceof HTMLElement &&
+                e.target.tagName !== 'TEXTAREA' &&
+                !(
+                  e.target instanceof HTMLButtonElement &&
+                  e.target.type === 'submit'
+                )
+              ) {
+                e.preventDefault()
+
+              }
+              // navigate("/dashboard", { replace: true });
+            }}
+            className="flex flex-col justify-between h-full"
+          >
+            <div className='overflow-auto'>
+              <CardHeader>
+                <CardTitle>{step.title}</CardTitle>
+                <CardDescription>{step.description}</CardDescription>
+                <p className="text-sm text-muted-foreground">
+                  Step {stepIndex + 1} of {STEPS.length}
+                </p>
+              </CardHeader>
+              <CardContent>
+                <StepComponent />
+              </CardContent>
+            </div>
+
+            <CardFooter className=''>
+              <div className="flex justify-between gap-2 w-full">
                 <Button
                   type="button"
                   variant="outline"
@@ -596,9 +603,10 @@ function RfeForm() {
                   </Button>
                 )}
               </div>
-            </form>
-          </FormProvider>
-        </CardContent>
+            </CardFooter>
+          </form>
+        </FormProvider>
+
       </Card>
     </div>
   )

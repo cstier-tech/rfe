@@ -246,7 +246,7 @@ function ComponentCard({
 
     return (
         <CardShell
-        dragEnabled={dragEnabled}
+            dragEnabled={dragEnabled}
             field={field}
             index={index}
             collapsible={collapsible}
@@ -259,7 +259,7 @@ function ComponentCard({
                             }`}
                     >
                         <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform" />
-                        <span className="truncate">{displayName}</span>
+                        <span className="truncate font-semibold">{displayName}</span>
                     </CollapsibleTrigger>
                     {/* Always mounted (even when disabled) so dnd-kit attaches its
                     drag-activator role/ARIA attributes to this handle from
