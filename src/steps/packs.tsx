@@ -1,356 +1,366 @@
-import { useEffect, useRef, useState } from 'react'
-import { ChevronRightIcon } from 'lucide-react'
+import { useEffect } from 'react'
 import { useFormContext, useFieldArray, useWatch, Controller } from 'react-hook-form'
 import { Input } from '@/components/ui/input'
-import { Field, FieldLabel, FieldError } from '@/components/ui/field'
+import { Field, FieldError } from '@/components/ui/field'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
-    Collapsible,
-    CollapsibleTrigger,
-    CollapsibleContent,
-} from '@/components/ui/collapsible'
-import type { ComponentItem, FormValues } from '@/lib/form'
-import { RadioButtonGroup } from '@/components/ui/radio-button-group'
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select'
+import type { FormValues } from '@/lib/form'
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Plus } from 'lucide-react'
 
 const PACK_TYPES = [
     { label: 'Shrink Wrap', value: 'Shrink Wrap' },
     { label: 'Banded', value: 'Banded' },
     { label: 'Convenient Cartons', value: 'Convenient Cartons' },
-    { label: 'Other', value: 'Other' }
+    { label: 'Other', value: 'Other' },
 ]
 
+const splitWholeQuantity = (total: number, count: number, index: number) => {
+    const base = Math.floor(total / count)
+    return base + (index < total % count ? 1 : 0)
+}
+
 function Packs() {
-    const { control } = useFormContext<FormValues>()
-
-    const components = useWatch({ control, name: 'components' }) ?? []
-
-    const { fields, append, remove } = useFieldArray({
+    const {
         control,
-        name: 'packs',
-    })
+        formState: { dirtyFields, errors },
+        getValues,
+        register,
+        setValue,
+        trigger,
+        unregister,
+    } = useFormContext<FormValues>()
+    const components = useWatch({ control, name: 'components' }) ?? []
+    const overviewQtyTiers = useWatch({ control, name: 'qty' }) ?? []
+    const packs = useWatch({ control, name: 'packs' }) ?? []
+    const { fields, append, remove } = useFieldArray({ control, name: 'packs' })
 
-    // Which pack is expanded. Only one at a time; null means all collapsed.
-    const [openKeys, setOpenKeys] = useState<Set<string>>(
-        () => new Set(fields[0] ? [fields[0].id] : []),
-    )
-    // When a pack is added, open it (and collapse the others).
-    const prevLen = useRef(fields.length)
+    const componentIdsKey = components.map((component) => component.id).join(',')
+
     useEffect(() => {
-        if (fields.length > prevLen.current) {
-            const newField = fields[fields.length - 1]
-            if (newField) {
-                setOpenKeys((prev) => new Set(prev).add(newField.id))
+        if (fields.length === 0) return
+
+        const currentPacks = getValues('packs')
+        overviewQtyTiers.forEach((tier, tierIndex) => {
+            const target = Number(tier.qty) || 0
+            if (target <= 0) return
+
+            currentPacks.forEach((pack, packIndex) => {
+                if (pack.qty[tierIndex]?.qty === undefined) {
+                    setValue(
+                        `packs.${packIndex}.qty.${tierIndex}.qty`,
+                        splitWholeQuantity(target, fields.length, packIndex),
+                    )
+                }
+            })
+        })
+    }, [fields.length, getValues, overviewQtyTiers, setValue])
+
+    useEffect(() => {
+        const validComponentIds = new Set(componentIdsKey ? componentIdsKey.split(',') : [])
+        const currentPacks = getValues('packs')
+
+        currentPacks.forEach((pack, packIndex) => {
+            const existingItems = new Map(
+                pack.items
+                    .filter((item) => validComponentIds.has(item.componentId))
+                    .map((item) => [item.componentId, item]),
+            )
+            const nextItems = components.map((component) =>
+                existingItems.get(component.id) ?? {
+                    componentId: component.id,
+                    qtyPerPack: 1,
+                },
+            )
+
+            if (JSON.stringify(nextItems) !== JSON.stringify(pack.items)) {
+                setValue(`packs.${packIndex}.items`, nextItems)
             }
-        }
-        prevLen.current = fields.length
-    }, [fields])
+        })
+    }, [componentIdsKey, fields.length, getValues, setValue])
 
     const addPack = () => {
-        append({ id: crypto.randomUUID(), type: '', qty: 1, items: [] })
+        const currentPacks = getValues('packs')
+        const newPackCount = currentPacks.length + 1
+        const newPackQty = overviewQtyTiers.map((tier, tierIndex) => {
+            const target = Number(tier.qty) || 0
+            const hasEditedPack = currentPacks.some(
+                (_, packIndex) => dirtyFields.packs?.[packIndex]?.qty?.[tierIndex]?.qty,
+            )
+
+            if (!hasEditedPack) {
+                return { qty: splitWholeQuantity(target, newPackCount, currentPacks.length) }
+            }
+
+            const existingTotal = currentPacks.reduce(
+                (total, pack) => total + (Number(pack.qty[tierIndex]?.qty) || 0),
+                0,
+            )
+            return { qty: Math.max(0, target - existingTotal) }
+        })
+
+        append({ id: crypto.randomUUID(), type: '', qty: newPackQty, items: [] })
+
+        overviewQtyTiers.forEach((tier, tierIndex) => {
+            const target = Number(tier.qty) || 0
+            const hasEditedPack = currentPacks.some(
+                (_, packIndex) => dirtyFields.packs?.[packIndex]?.qty?.[tierIndex]?.qty,
+            )
+
+            if (hasEditedPack) return
+
+            currentPacks.forEach((_, packIndex) => {
+                setValue(
+                    `packs.${packIndex}.qty.${tierIndex}.qty`,
+                    splitWholeQuantity(target, newPackCount, packIndex),
+                )
+            })
+        })
     }
+
+    const multipleTiers = overviewQtyTiers.length > 1
+    const multiplePacks = packs.length > 1
 
     return (
         <div className="flex flex-col gap-4">
-            {/* <Controller
-                control={control}
-                name="convenientCartons"
-                defaultValue={false}
-                render={({ field }) => (
-                    <Field orientation="horizontal">
-                        <Checkbox
-                            id="convenientCartons"
-                            checked={!!field.value}
-                            onCheckedChange={(v) => field.onChange(v === true)}
-                        />
-                        <FieldLabel htmlFor="convenientCartons">
-                            Pack in Convenient Cartons
-                        </FieldLabel>
-                    </Field>
-                )}
-            /> */}
-
             {fields.length === 0 && (
                 <p className="text-sm text-muted-foreground">No packs yet.</p>
             )}
+            <div className='border bg-white p-5 rounded-lg'>
+                {/* <span className='text-xl font-semibold'>Assembly</span> */}
+                <Table>
 
-            {fields.map((field, packIndex) => (
-                <PackCard
-                    key={field.id}
-                    packIndex={packIndex}
-                    components={components}
-                    open={openKeys.has(field.id)}
-                    onOpenChange={(open) =>
-                        setOpenKeys((prev) => {
-                            const next = new Set(prev)
-                            if (open) {
-                                next.add(field.id)
-                            } else {
-                                next.delete(field.id)
-                            }
-                            return next
-                        })
-                    }
-                    onRemove={() => remove(packIndex)}
-                />
-            ))}
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>{multiplePacks && 'Variant #'}</TableHead>
+                            <TableHead>Pack Type</TableHead>
+                            {overviewQtyTiers.map((tier, tierIndex) => {
+                                let displayLabel = multipleTiers ? `Packs @ qty ${tier.qty ?? 0}` : 'Pack Qty'
+                                return (
+                                    <TableHead key={tier.name ?? tierIndex}>{displayLabel}</TableHead>
+                                )
 
-            <Button type="button" variant="outline" onClick={addPack}>
-                Add pack
-            </Button>
-        </div>
-    )
-}
+                            })}
 
-type PackCardProps = {
-    packIndex: number
-    components: ComponentItem[]
-    open: boolean
-    onOpenChange: (open: boolean) => void
-    onRemove: () => void
-}
+                            {multiplePacks && <TableHead>Actions</TableHead>}
 
-function PackCard({
-    packIndex,
-    components,
-    open,
-    onOpenChange,
-    onRemove,
-}: PackCardProps) {
-    const {
-        control,
-        register,
-        unregister,
-        formState: { errors },
-    } = useFormContext<FormValues>()
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {packs.map((pack, packIndex) => {
+                            const packErrors = errors.packs?.[packIndex]
 
-    const {
-        fields: items,
-        append: appendItem,
-        remove: removeItem,
-    } = useFieldArray({ control, name: `packs.${packIndex}.items` })
+                            return (
+                                <TableRow key={pack.id}>
+                                    <TableCell>{multiplePacks ? `Assembly Variant ${packIndex + 1}` : 'Assembly'}</TableCell>
+                                    <TableCell>
+                                        <div className="flex items-start gap-2">
+                                            <Controller
+                                                control={control}
+                                                name={`packs.${packIndex}.type`}
+                                                rules={{ required: 'Pack Type is required' }}
+                                                render={({ field, fieldState }) => (
+                                                    <Select
+                                                        value={field.value || undefined}
+                                                        onValueChange={(value) => {
+                                                            field.onChange(value)
+                                                            if (value !== 'Other') {
+                                                                unregister(`packs.${packIndex}.typeOther`)
+                                                            }
+                                                        }}
+                                                    >
+                                                        <SelectTrigger
+                                                            size="sm"
+                                                            aria-invalid={fieldState.invalid || undefined}
+                                                        >
+                                                            <SelectValue placeholder="Select type" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {PACK_TYPES.map((option) => (
+                                                                <SelectItem key={option.value} value={option.value}>
+                                                                    {option.label}
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                )}
+                                            />
+                                            {pack.type === 'Other' && (
+                                                <Input
+                                                    className="w-36"
+                                                    aria-label={`Custom type for Assembly Variant ${packIndex + 1}`}
+                                                    {...register(`packs.${packIndex}.typeOther`, {
+                                                        required: 'Please specify the pack type',
+                                                    })}
+                                                />
+                                            )}
+                                        </div>
+                                        <FieldError errors={[packErrors?.type, packErrors?.typeOther]} />
+                                    </TableCell>
+                                    {overviewQtyTiers.map((tier, tierIndex) => {
 
-    const packType = useWatch({ control, name: `packs.${packIndex}.type` })
+                                        const fieldName = `packs.${packIndex}.qty.${tierIndex}.qty` as const
+                                        const tierTarget = Number(tier.qty) || 0
+                                        const currentValue = getValues(fieldName)
+                                        const fieldRegistration = register(fieldName, {
+                                            required: 'Pack Qty is required',
+                                            valueAsNumber: true,
+                                            min: { value: 0, message: 'Pack Qty cannot be negative' },
+                                            validate: {
+                                                wholeNumber: (value) =>
+                                                    Number.isInteger(value) || 'Must be a whole number',
+                                                total: (value) => {
+                                                    const total = getValues('packs').reduce(
+                                                        (sum, currentPack, index) => index === packIndex
+                                                            ? sum + (Number(value) || 0)
+                                                            : sum + (Number(currentPack.qty[tierIndex]?.qty) || 0),
+                                                        0,
+                                                    )
+                                                    if (total === tierTarget) return true
+                                                    const difference = Math.abs(total - tierTarget)
+                                                    return total > tierTarget
+                                                        ? `Over by ${difference}`
+                                                        : `Under by ${difference}`
+                                                },
+                                            },
+                                        })
+                                        const tierFieldNames = packs.map((_, index) =>
+                                            `packs.${index}.qty.${tierIndex}.qty` as const,
+                                        )
+                                        if (multiplePacks && multipleTiers) {
+                                            return (
+                                                <TableCell key={fieldName}>
+                                                    <Field name={fieldName}>
+                                                        <Input
+                                                            id={fieldName}
+                                                            type="number"
+                                                            step="1"
+                                                            defaultValue={
+                                                                currentValue ??
+                                                                splitWholeQuantity(tierTarget, fields.length, packIndex)
+                                                            }
+                                                            {...fieldRegistration}
+                                                            onChange={(event) => {
+                                                                fieldRegistration.onChange(event)
+                                                                void trigger(tierFieldNames)
+                                                            }}
+                                                        />
+                                                        <FieldError errors={[packErrors?.qty?.[tierIndex]?.qty]} />
+                                                    </Field>
+                                                </TableCell>
+                                            )
+                                        }
+                                        return (
+                                            <TableCell>
+                                                {tier.qty}
 
-    // Drop selections whose component no longer exists (deleted in a prior step).
-    const componentIdsKey = components.map((c) => c.id).join(',')
-    useEffect(() => {
-        const valid = new Set(componentIdsKey ? componentIdsKey.split(',') : [])
-        for (let i = items.length - 1; i >= 0; i--) {
-            if (!valid.has(items[i].componentId)) removeItem(i)
-        }
-        // Add items for any component not yet in this pack, so everything
-        // starts selected by default.
-        const existingIds = new Set(items.map((it) => it.componentId))
-        for (const component of components) {
-            if (!existingIds.has(component.id)) {
-                appendItem({ componentId: component.id, qtyPerPack: 1 })
-            }
-        }
-        // Intentionally keyed only on componentIdsKey: `items` changes on every
-        // field-array edit, and re-running then would fight the user's typing.
-    }, [componentIdsKey])
+                                            </TableCell>
+                                        )
+                                    })
+                                    }
 
-    const packErrors = errors.packs?.[packIndex]
-    const hasErrors = !!packErrors && Object.keys(packErrors).length > 0
-
-    return (
-        <Collapsible
-            open={open}
-            onOpenChange={onOpenChange}
-            className="rounded-lg border border-cyan-950/20 bg-cyan-600/3"
-        >
-            <div className="flex items-center justify-between gap-2 p-3">
-                <CollapsibleTrigger
-                    className={`flex flex-1 items-center gap-2 text-left text-sm font-semibold [&[data-state=open]>svg]:rotate-90 ${hasErrors ? 'text-destructive' : ''
-                        }`}
-                >
-                    <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform" />
-                    Pack {packIndex + 1}
-                </CollapsibleTrigger>
-                <Button type="button" variant="destructive" size="sm" onClick={onRemove}>
-                    Remove
+                                    {multiplePacks &&
+                                        <TableCell>
+                                            <Button
+                                                type="button"
+                                                variant="destructive"
+                                                size="sm"
+                                                onClick={() => remove(packIndex)}
+                                            >
+                                                Remove
+                                            </Button>
+                                        </TableCell>
+                                    }
+                                </TableRow>
+                            )
+                        })}
+                    </TableBody>
+                </Table>
+                <Button type="button" size='sm' className='w-auto' variant="outline" onClick={addPack}>
+                    <Plus />
+                    Add Assembly Variation
                 </Button>
             </div>
 
-            <CollapsibleContent className="flex flex-col gap-3 p-3 pt-0">
-                <RadioButtonGroup
-                    control={control}
-                    name={`packs.${packIndex}.type`}
-                    legend='Pack Type *'
-                    options={PACK_TYPES}
-                    rules={{ required: 'Pack Type is required' }}
-                    onValueChange={(value) => {
-                        // Clear + unregister (rather than shouldUnregister on
-                        // the input itself) so switching away from "Other"
-                        // drops the stale value/validation, but simply
-                        // navigating to another step and back — which also
-                        // unmounts this input — does not.
-                        if (value !== 'Other') {
-                            unregister(`packs.${packIndex}.typeOther`)
-                        }
-                    }}
-                />
 
-                {packType === 'Other' && (
-                    <Field>
-                        <FieldLabel htmlFor={`packs.${packIndex}.typeOther`}>
-                            Please specify *
-                        </FieldLabel>
-                        <Input
-                            id={`packs.${packIndex}.typeOther`}
-                            {...register(`packs.${packIndex}.typeOther`, {
-                                required: 'Please specify the pack type',
+
+            <div className='border bg-white p-5 rounded-lg'>
+                <Table>
+                    <TableCaption>Components</TableCaption>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Component</TableHead>
+                            {packs.map((pack, packIndex) => (
+                                <TableHead className='text-xs' key={pack.id}>{`V${packIndex + 1} per pack`}</TableHead>
+                            ))}
+                            {overviewQtyTiers.map((tier, tierIndex) => {
+                                let displayLabel = multipleTiers ? `Pieces @ qty ${tier.qty ?? 0}` : 'Total Pieces'
+                                return (
+                                    <TableHead key={tier.name ?? tierIndex}>{displayLabel}</TableHead>
+                                )
                             })}
-                        />
-                        <FieldError errors={[packErrors?.typeOther]} />
-                    </Field>
-                )}
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {components.map((component) => (
+                            <TableRow key={component.id}>
+                                <TableCell>{component.name || 'Unnamed component'}</TableCell>
+                                {packs.map((pack, packIndex) => {
+                                    const itemIndex = pack.items.findIndex(
+                                        (item) => item.componentId === component.id,
+                                    )
+                                    const item = itemIndex === -1 ? undefined : pack.items[itemIndex]
+                                    const qtyError = errors.packs?.[packIndex]?.items?.[itemIndex]?.qtyPerPack
 
-                <Field>
-                    <FieldLabel htmlFor={`packs.${packIndex}.qty`}>
-                        Pack Qty *
-                    </FieldLabel>
-                    <Input
-                        id={`packs.${packIndex}.qty`}
-                        type="number"
-                        {...register(`packs.${packIndex}.qty`, {
-                            required: 'Pack Qty is required',
-                            valueAsNumber: true,
-                            min: { value: 1, message: 'Pack Qty must be positive' },
-                        })}
-                    />
-                    <FieldError errors={[packErrors?.qty]} />
-                </Field>
-
-                <div className="flex flex-col gap-1">
-                    <span className="text-sm font-medium">
-                        Components in this pack
-                    </span>
-                    {components.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                            Add components in the previous step first.
-                        </p>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                                <thead>
-                                    <tr className="border-b border-border text-left text-muted-foreground">
-                                        <th className="w-8 py-1 font-medium"></th>
-                                        <th className="py-1 font-medium">Component</th>
-                                        <th className="py-1 font-medium">Source</th>
-                                        <th className="py-1 font-medium">Qty Per Pack</th>
-                                        <th className="py-1 font-medium">Total Needed</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {components.map((component, compIndex) => {
-                                        const itemIndex = items.findIndex(
-                                            (it) => it.componentId === component.id,
+                                    return (
+                                        <TableCell key={pack.id}>
+                                            {item && (
+                                                <div className="flex flex-col gap-1">
+                                                    <Input
+                                                        type="number"
+                                                        step="1"
+                                                        className="h-7 w-20"
+                                                        aria-label={`Qty Per Pack for ${component.name || 'component'} in Variant ${packIndex + 1}`}
+                                                        {...register(`packs.${packIndex}.items.${itemIndex}.qtyPerPack`, {
+                                                            required: 'Required',
+                                                            valueAsNumber: true,
+                                                            min: { value: 0, message: 'Min 0' },
+                                                        })}
+                                                    />
+                                                    <FieldError className="text-xs" errors={[qtyError]} />
+                                                </div>
+                                            )}
+                                        </TableCell>
+                                    )
+                                })}
+                                {overviewQtyTiers.map((_, tierIndex) => {
+                                    const needed = packs.reduce((total, pack) => {
+                                        const item = pack.items.find(
+                                            (packItem) => packItem.componentId === component.id,
                                         )
+                                        return total + (Number(pack.qty[tierIndex]?.qty) || 0)
+                                            * (Number(item?.qtyPerPack) || 0)
+                                    }, 0)
 
-                                        return (
-                                            <ComponentRow
-                                                key={component.id}
-                                                packIndex={packIndex}
-                                                itemIndex={itemIndex}
-                                                label={
-                                                    component.name ||
-                                                    `Component ${compIndex + 1}`
-                                                }
-                                                source={component.source}
-                                                onToggle={() => {
-                                                    if (itemIndex === -1) {
-                                                        appendItem({
-                                                            componentId: component.id,
-                                                            qtyPerPack: 1,
-                                                        })
-                                                    } else {
-                                                        removeItem(itemIndex)
-                                                    }
-                                                }}
-                                            />
-                                            // <td></td>
-                                        )
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
-                </div>
-            </CollapsibleContent>
-        </Collapsible>
-    )
-}
+                                    return (
+                                        <TableCell key={`${component.id}-${tierIndex}`}>
+                                            <span className="font-semibold">{needed}</span>
+                                        </TableCell>
+                                    )
+                                })}
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </div>
 
-type ComponentRowProps = {
-    packIndex: number
-    itemIndex: number
-    label: string
-    source: string
-    onToggle: () => void
-}
-
-function ComponentRow({
-    packIndex,
-    itemIndex,
-
-    label,
-    source,
-    onToggle,
-}: ComponentRowProps) {
-    const {
-        register,
-        control,
-        formState: { errors },
-    } = useFormContext<FormValues>()
-
-
-    const selected = itemIndex !== -1
-    // const selected = itemIndex === -1
-    const qtyError = selected
-        ? errors.packs?.[packIndex]?.items?.[itemIndex]?.qtyPerPack
-        : undefined
-
-    const [qtyPerPack, packsQty] = useWatch({
-        control,
-        name: [`packs.${packIndex}.items.${itemIndex}.qtyPerPack`, `packs.${packIndex}.qty`]
-    })
-
-    const totalNeeded = selected ? qtyPerPack * packsQty : '—'
-
-    return (
-        <tr className="border-b border-border last:border-0">
-            <td className="py-2 align-top">
-                <Checkbox
-                    checked={selected}
-                    onCheckedChange={() => onToggle()}
-                    aria-label={`Include ${label} in this pack`}
-                />
-            </td>
-            <td className="py-2 align-top">{label}</td>
-            <td className="py-2 align-top text-muted-foreground">{source || '—'}</td>
-            <td className="py-2 align-top">
-                {selected ? (
-                    <div className="flex flex-col gap-1">
-                        <Input
-                            type="number"
-                            className="h-7 w-20"
-                            aria-label={`Qty Per Pack for ${label}`}
-                            {...register(`packs.${packIndex}.items.${itemIndex}.qtyPerPack`, {
-                                required: 'Required',
-                                valueAsNumber: true,
-                                min: { value: 1, message: 'Min 1' },
-                            })}
-                        />
-                        <FieldError className="text-xs" errors={[qtyError]} />
-                    </div>
-                ) : (
-                    <span className="text-muted-foreground">—</span>
-                )}
-            </td>
-            <td>{totalNeeded}</td>
-        </tr>
+        </div>
     )
 }
 
