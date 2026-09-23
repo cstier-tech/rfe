@@ -434,7 +434,7 @@ function PacksDetail({
 }) {
   return (
     <div>
-      <p className="mb-1 text-xs font-medium text-muted-foreground">Packs</p>
+      <p className="mb-1 text-xs font-medium text-muted-foreground">Builds</p>
       {packs.length === 0 ? (
         <p className="text-xs text-muted-foreground">None</p>
       ) : (

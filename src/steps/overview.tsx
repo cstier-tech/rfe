@@ -11,7 +11,6 @@ import {
 import { Button } from '@/components/ui/button'
 import { DatePickerInput } from '@/components/ui/datepicker'
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { RadioButtonGroup } from '@/components/ui/radio-button-group'
 import {
     AlertDialog,
     AlertDialogAction,
@@ -23,12 +22,11 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useFormContext, Controller, useWatch, useFieldArray } from 'react-hook-form'
 import type { FormValues } from '@/lib/form'
-import { Check } from "lucide-react"
 
-const kittingRequiredOptions = [
-    { label: 'No', value: 'No' },
-    { label: 'Yes', value: 'Yes' }
-]
+// const kittingRequiredOptions = [
+//     { label: 'No', value: 'No' },
+//     { label: 'Yes', value: 'Yes' }
+// ]
 
 function Overview() {
     const {
@@ -42,8 +40,6 @@ function Overview() {
         name: 'jobType',
         defaultValue: 'New Job',
     })
-
-    const kittingRequired = useWatch({ control, name: 'kittingRequired' })
 
     const {
         fields: qtyFields,
@@ -98,7 +94,7 @@ function Overview() {
         <div className="flex flex-col gap-4">
 
             <div className="flex gap-4">
-                <Field className='w-full'>
+                <Field name="name" className='w-full'>
                     <FieldLabel htmlFor="name">RFE Name *</FieldLabel>
                     <Input
 
@@ -113,6 +109,7 @@ function Overview() {
                     rules={{ required: 'Due date is required' }}
                     render={({ field, fieldState }) => (
                         <DatePickerInput
+                            name="dueDate"
                             id="dueDate"
                             label="Requested Due Date *"
                             value={field.value}
@@ -124,21 +121,21 @@ function Overview() {
             </div>
 
             <div className='flex gap-4'>
-                <Field className='w-full'>
+                <Field name="customer" className='w-full'>
                     <FieldLabel>Customer</FieldLabel>
                     <Input
                         id='customer'
                         {...register('customer')}
                     />
                 </Field>
-                <Field className='w-full'>
+                <Field name="customerNumber" className='w-full'>
                     <FieldLabel>Customer Number</FieldLabel>
                     <Input
                         id='customerNumber'
                         {...register('customerNumber')}
                     />
                 </Field>
-                <Field className='w-full'>
+                <Field name="salesRep" className='w-full'>
                     <FieldLabel>Sales Rep</FieldLabel>
                     <Input
                         id='salesRep'
@@ -180,7 +177,7 @@ function Overview() {
 
             {jobType !== 'New Job' &&
                 <div className='flex gap-4'>
-                    <Field className='w-full'>
+                    <Field name="prevJobNumber" className='w-full'>
                         <FieldLabel htmlFor='prevJobNumber'>
                             Previous Job Number
                         </FieldLabel>
@@ -190,7 +187,7 @@ function Overview() {
                         />
                     </Field>
                     {jobType !== 'Reprint - no changes' &&
-                        <Field className='w-full'>
+                        <Field name="changesFromPrev" className='w-full'>
                             <FieldLabel htmlFor='changesFromPrev'>
                                 Changes from previous job
                             </FieldLabel>
@@ -202,77 +199,86 @@ function Overview() {
                     }
                 </div>
             }
-            <RadioButtonGroup
+            {/* <RadioButtonGroup
                 control={control}
                 name='kittingRequired'
-                legend='Is kitting or assembly required? *'
+                legend='Is assembly (kitting) required? *'
                 options={kittingRequiredOptions}
                 rules={{ required: 'Select yes or no' }}
-            />
+            /> */}
 
-            {kittingRequired && (
-                <Field>
-                    <FieldLabel>
-                        {kittingRequired === 'Yes'
-                            ? 'How many kits or assembled units? *'
-                            : 'How many units? *'}
-                    </FieldLabel>
-                    <FieldDescription>
-                        If you need this job estimated at different quantities,
-                        add all of them using the Add qty button.
-                    </FieldDescription>
-                    <div className='flex flex-col gap-2'>
-                        {qtyFields.length === 0 && (
-                            <p className='text-sm text-muted-foreground'>
-                                No quantities yet.
-                            </p>
-                        )}
-                        {qtyFields.map((qtyField, index) => (
-                            <div
-                                key={qtyField.id}
-                                className='flex items-start gap-2'
-                            >
-                                <div className='flex flex-col gap-1'>
-                                    <Input
-                                        type='number'
-                                        className='w-32'
-                                        aria-label={`Quantity ${index + 1}`}
-                                        {...register(`qty.${index}.qty`, {
-                                            required: 'Required',
-                                            valueAsNumber: true,
-                                            min: { value: 1, message: 'Min 1' },
-                                        })}
-                                    />
-                                    <FieldError
-                                        className='text-xs'
-                                        errors={[errors.qty?.[index]?.qty]}
-                                    />
-                                </div>
-                                {index > 0 &&
-                                    <Button
-                                        type='button'
-                                        variant='ghost'
-                                        size='sm'
-                                        onClick={() => removeQty(index)}
-                                    >
-                                        Remove
-                                    </Button>
-                                }
-                                
-                            </div>
-                        ))}
-                        <Button
-                            type='button'
-                            variant='outline'
-                            size='sm'
-                            className='self-start'
-                            onClick={() => appendQty({})}
+            {/* {kittingRequired && ( */}
+            <Field>
+                <FieldLabel>
+                    {/* {kittingRequired === 'Yes'
+                            ? 'How many assembled units? *'
+                            : 'How many units? *'} */}
+                    How many finished units?
+                </FieldLabel>
+                <FieldDescription>
+                    If you need this job estimated at different quantities,
+                    add all of them using the Add qty button.
+                </FieldDescription>
+                <div className='flex flex-col gap-2'>
+                    {qtyFields.length === 0 && (
+                        <p className='text-sm text-muted-foreground'>
+                            No quantities yet.
+                        </p>
+                    )}
+                    {qtyFields.map((qtyField, index) => (
+                        <div
+                            key={qtyField.id}
+                            className='flex items-start gap-2'
                         >
-                            Add qty
-                        </Button>
-                    </div>
-                </Field>
-            )}
+                            <div className='flex flex-col gap-1'>
+                                <Input
+                                    type='number'
+                                    className='w-32 aria-[invalid=true]:bg-red-50 aria-[invalid=true]:border-destructive'
+                                    aria-label={`Quantity ${index + 1}`}
+                                    {...register(`qty.${index}.qty`, {
+                                        required: 'Required',
+                                        valueAsNumber: true,
+                                        min: { value: 1, message: 'Min 1' },
+                                    })}
+                                    aria-invalid={
+                                        errors.qty?.[index]?.qty
+                                            ? 'true'
+                                            : undefined
+                                    }
+                                />
+                                <FieldError
+                                    className='text-xs'
+                                    errors={[errors.qty?.[index]?.qty]}
+                                />
+                            </div>
+                            {index > 0 &&
+                                <Button
+                                    type='button'
+                                    variant='ghost'
+                                    size='sm'
+                                    onClick={() => removeQty(index)}
+                                >
+                                    Remove
+                                </Button>
+                            }
+
+                        </div>
+                    ))}
+                    {qtyFields.length < 5 && (
+                        <Button
+                        type='button'
+                        variant='outline'
+                        size='sm'
+                        className='self-start'
+                        onClick={() => appendQty({})}
+                    >
+                        Add qty
+                    </Button>
+                    )}
+                    
+                </div>
+            </Field>
+            {/* )} */}
 
             <AlertDialog
                 open={reviewNames.length > 0}

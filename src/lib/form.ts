@@ -40,12 +40,13 @@ export type Pack = {
   type: string
   // Only meaningful when type === 'Other'; folded into `type` on submit.
   typeOther?: string
-  qty: number
+  qty: QtyTier[]
   items: PackItem[]
 }
 
 export type QtyTier = {
   qty?: number
+  name?: string
 }
 
 export type FormValues = {

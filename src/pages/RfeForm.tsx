@@ -10,13 +10,14 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import type { ComponentSource, FormValues } from '@/lib/form'
+import type { ComponentSource, FormValues, QtyTier } from '@/lib/form'
 import { supabase } from '@/lib/supabase'
 
 import Overview from '../steps/overview'
 import Components from '../steps/components'
 import Packs from '../steps/packs'
 import Shipping from '../steps/shipping'
+import Preview from './Preview'
 
 type Step = {
   title: string
@@ -49,8 +50,8 @@ const STEPS: Step[] = [
     fields: ['components'],
   },
   {
-    title: 'Packs',
-    description: 'How will the components in this job be packed?',
+    title: 'Assembly',
+    description: 'How will the components in this job be assembled together?',
     Component: Packs,
     fields: ['packs'],
   },
@@ -80,7 +81,7 @@ const KNOWN_PACK_TYPES = ['Shrink Wrap', 'Banded', 'Convenient Cartons', 'Other'
 
 const defaultComponent = () => ({
   id: crypto.randomUUID(),
-  name: 'Component 1',
+  name: '',
   finalSize: '',
   flatSize: '',
   stock: '',
@@ -94,10 +95,10 @@ const defaultComponent = () => ({
 })
 
 
-const defaultPack = () => ({
+const defaultPack = (qty: QtyTier[] = [{}]) => ({
   id: crypto.randomUUID(),
   type: '',
-  qty: 1,
+  qty,
   items: [],
 })
 
@@ -163,6 +164,9 @@ function RfeForm() {
       rfeId: isEditing && sourceRfeId ? sourceRfeId : crypto.randomUUID(),
     },
   })
+
+ 
+
   const [stepIndex, setStepIndex] = useState(0)
   const [loading, setLoading] = useState(isEditing || isDuplicating)
   // A new submission (including a duplicate) always creates a new RFE row;
@@ -176,12 +180,23 @@ function RfeForm() {
     if (!sourceRfeId || (!isEditing && !isDuplicating)) return
 
     const loadFromSource = async () => {
-      const [versionsRes, componentsRes, packsRes, packItemsRes, quantitiesRes] =
+      const [
+        versionsRes,
+        componentsRes,
+        packsRes,
+        packItemsRes,
+        packQtysRes,
+        quantitiesRes,
+      ] =
         await Promise.all([
           supabase.from('RFE Versions').select('*').eq('rfe_id', sourceRfeId),
           supabase.from('Components').select('*'),
           supabase.from('Packs').select('*'),
           supabase.from('Pack Items').select('*'),
+          supabase
+            .from('Packs Qtys')
+            .select('*')
+            .order('created_at', { ascending: true }),
           supabase.from('RFE Quantities').select('*'),
         ])
 
@@ -190,6 +205,7 @@ function RfeForm() {
         componentsRes,
         packsRes,
         packItemsRes,
+        packQtysRes,
         quantitiesRes,
       ]) {
         if (error) console.error(error)
@@ -218,6 +234,7 @@ function RfeForm() {
         (p) => p.version_id === latestVersion.id,
       )
       const packItems = packItemsRes.data ?? []
+      const packQtys = packQtysRes.data ?? []
 
       const quantities = (quantitiesRes.data ?? []).filter(
         (q) => q.version_id === latestVersion.id,
@@ -301,14 +318,24 @@ function RfeForm() {
             : [{}],
         components: newComponents.length > 0 ? newComponents : [defaultComponent()],
         // convenientCartons: latestVersion.convenient_cartons ?? false,
-        packs: packs.map((pack) => {
+            packs: packs.map((pack) => {
           const rawType = pack.pack_type ?? ''
           const isKnownType = KNOWN_PACK_TYPES.includes(rawType)
           return {
             id: crypto.randomUUID(),
             type: isKnownType ? rawType : 'Other',
             typeOther: isKnownType ? undefined : rawType,
-            qty: Number(pack.num_of_packs) || 1,
+                qty: (() => {
+                  const savedQtys = packQtys
+                    .filter((packQty) => packQty.pack_id === pack.id)
+                    .map((packQty) => ({ qty: Number(packQty.qty) || 0 }))
+
+                  return savedQtys.length > 0
+                    ? savedQtys
+                    : quantities.map((quantity) => ({
+                        qty: (Number(quantity.quantity) || 0) / Math.max(packs.length, 1),
+                      }))
+                })(),
             items: packItems
               .filter((item) => item.pack_id === pack.id)
               .map((item) => ({
@@ -466,7 +493,7 @@ function RfeForm() {
         .from('Packs')
         .insert({
           version_id: data.versionId,
-          num_of_packs: pack.qty,
+          num_of_packs: pack.qty[0]?.qty ?? 0,
           pack_type: pack.type,
         })
         .select('id')
@@ -476,6 +503,17 @@ function RfeForm() {
         console.error(packError)
         continue
       }
+
+      const { error: packQtysError } = await supabase.from('Packs Qtys').insert(
+        pack.qty
+          .filter((tier) => tier.qty != null)
+          .map((tier) => ({
+            pack_id: insertedPack.id,
+            qty: tier.qty,
+          })),
+      )
+
+      if (packQtysError) console.error(packQtysError)
 
       if (pack.items.length === 0) continue
 
@@ -525,16 +563,18 @@ function RfeForm() {
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center py-20 bg-taupe-100">
-      <Card className="w-full max-w-2xl">
-        <CardHeader>
-          <CardTitle>{step.title}</CardTitle>
-          <CardDescription>{step.description}</CardDescription>
+    <div className="flex min-h-svh items-center justify-center bg-taupe-100">
+      <Preview getValues={methods.getValues}/>
+      
+      <div className="w-full p-10">
+        <div>
+          <span className='text-xl'>{step.title}</span>
+          <span>{step.description}</span>
           <p className="text-sm text-muted-foreground">
             Step {stepIndex + 1} of {STEPS.length}
           </p>
-        </CardHeader>
-        <CardContent>
+        </div>
+        <div>
           <FormProvider {...methods}>
             <form
               onSubmit={methods.handleSubmit(onSubmit)}
@@ -598,8 +638,8 @@ function RfeForm() {
               </div>
             </form>
           </FormProvider>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   )
 }

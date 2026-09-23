@@ -37,6 +37,7 @@ function isValidDate(date: Date | undefined) {
 }
 
 type DatePickerInputProps = {
+    name?: string
     label?: string
     id?: string
     /** Currently selected date. */
@@ -48,6 +49,7 @@ type DatePickerInputProps = {
 }
 
 export function DatePickerInput({
+    name,
     label = "Date",
     id = "date-required",
     value,
@@ -60,7 +62,7 @@ export function DatePickerInput({
     const [text, setText] = React.useState(formatDate(value))
 
     return (
-        <Field className="w-full">
+        <Field name={name} className="w-full">
             <FieldLabel htmlFor={id}>{label}</FieldLabel>
             <InputGroup>
                 <InputGroupInput

@@ -27,7 +27,7 @@ function Shipping() {
     })
     return (
         <div className="flex flex-col gap-4">
-            <Field className="max-w-64">
+            <Field name="totalShipments" className="max-w-64">
                 <FieldLabel htmlFor="totalShipments">
                     Total Number of Shipments *
                 </FieldLabel>
@@ -73,7 +73,7 @@ function Shipping() {
                 />
 
                 {asnRequired && (
-                    <Field>
+                    <Field name="asnInstructions">
                         <FieldLabel htmlFor="asnInstructions">
                             ASN Instructions *
                         </FieldLabel>
@@ -140,7 +140,7 @@ function Shipping() {
                 {internationalShipment && (
                     <div className="flex flex-col gap-3">
                         <div className="flex gap-4">
-                            <Field>
+                            <Field name="usnpcCode">
                                 <FieldLabel htmlFor="usnpcCode">
                                     USNPC Code *
                                 </FieldLabel>
@@ -152,7 +152,7 @@ function Shipping() {
                                 />
                                 <FieldError errors={[errors.usnpcCode]} />
                             </Field>
-                            <Field>
+                            <Field name="customsValue">
                                 <FieldLabel htmlFor="customsValue">
                                     Customs Value *
                                 </FieldLabel>
@@ -165,7 +165,7 @@ function Shipping() {
                                 <FieldError errors={[errors.customsValue]} />
                             </Field>
                         </div>
-                        <Field>
+                        <Field name="customsDescription">
                             <FieldLabel htmlFor="customsDescription">
                                 Customs Description *
                             </FieldLabel>
