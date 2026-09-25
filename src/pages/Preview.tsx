@@ -206,9 +206,9 @@ function Preview({ getValues }: { getValues: UseFormGetValues<any> }) {
                         ))}
                     </SidebarGroup>
                     <SidebarGroup>
-                        {(values.packs ?? []).map((p: any, i: number) => (
+                        {(values.assemblies ?? []).map((p: any, i: number) => (
                             <div key={p.id}>
-                                <span className='font-light text-gray-600 text-sm'>Pack {i + 1}</span>
+                                <span className='font-light text-gray-600 text-sm'>Assembly {i + 1}</span>
                                 <Table>
                                     <TableBody>
                                         <TableRow>

@@ -2,9 +2,10 @@ import { Fragment, useEffect, useState } from 'react'
 import { Check, ChevronRightIcon, MoreVertical } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
+import { formatUnitCounts, type SavedUnitBuildItem, type SavedUnitCount } from '@/lib/form'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import {
   Table,
   TableBody,
@@ -17,8 +18,19 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 type RfeVersion = {
   id: string
@@ -39,26 +51,20 @@ type ComponentRow = {
   stock: string | null
   coating: string | null
   flat_size: string | null
-  quantity: string | null
   source: string | null
   sort_order: string | null
   type: string | null
   other_type: string | null
 }
 
-type PackRow = {
+type AssemblyRow = {
   id: number
   version_id: string
+  num_of_units: SavedUnitCount[] | null
+  steps: { step: number; instruction: string }[] | null
+  unit_build: SavedUnitBuildItem[] | null
   pack_type: string | null
-  num_of_packs: string | null
-}
-
-// qty_per_pack lives per component, not on the pack itself — a pack can hold
-// several components, each potentially packed at a different quantity.
-type PackItemRow = {
-  pack_id: number
-  component_id: string
-  qty_per_pack: string | null
+  units_per_pack: string | null
 }
 
 type QuantityRow = {
@@ -100,14 +106,6 @@ function groupByVersionId<T extends { version_id: string | null }>(rows: T[]) {
   return grouped
 }
 
-function groupByPackId(rows: PackItemRow[]) {
-  const grouped = new Map<number, PackItemRow[]>()
-  for (const row of rows) {
-    grouped.set(row.pack_id, [...(grouped.get(row.pack_id) ?? []), row])
-  }
-  return grouped
-}
-
 // Every version of each RFE (not just the latest), newest first, for the
 // version history table in the expanded row.
 function groupByRfeId(versions: RfeVersion[]) {
@@ -130,35 +128,29 @@ function Dashboard() {
   const [componentsByVersion, setComponentsByVersion] = useState(
     new Map<string, ComponentRow[]>(),
   )
-  const [packsByVersion, setPacksByVersion] = useState(
-    new Map<string, PackRow[]>(),
-  )
-  const [packItemsByPack, setPackItemsByPack] = useState(
-    new Map<number, PackItemRow[]>(),
-  )
-  const [componentNameById, setComponentNameById] = useState(
-    new Map<string, string>(),
+  const [assembliesByVersion, setAssembliesByVersion] = useState(
+    new Map<string, AssemblyRow[]>(),
   )
   const [quantitiesByVersion, setQuantitiesByVersion] = useState(
     new Map<string, QuantityRow[]>(),
   )
   const [rfeById, setRfeById] = useState(new Map<string, RfeRow>())
   const [expanded, setExpanded] = useState(new Set<string>())
+  const [pendingDelete, setPendingDelete] = useState<RfeVersion | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const load = async () => {
-      const [versions, components, packs, packItems, quantities, rfes] =
+      const [versions, components, assemblies, quantities, rfes] =
         await Promise.all([
           supabase.from('RFE Versions').select('*'),
           supabase.from('Components').select('*'),
-          supabase.from('Packs').select('*'),
-          supabase.from('Pack Items').select('*'),
+          supabase.from('Assemblies').select('*').order('id', { ascending: true }),
           supabase.from('RFE Quantities').select('*'),
           supabase.from('RFEs').select('*'),
         ])
 
-      for (const { error } of [versions, components, packs, packItems, quantities, rfes]) {
+      for (const { error } of [versions, components, assemblies, quantities, rfes]) {
         if (error) console.error(error)
       }
 
@@ -169,16 +161,7 @@ function Dashboard() {
       setRfes(latestPerRfe(versions.data ?? []))
       setVersionsByRfe(groupByRfeId(versions.data ?? []))
       setComponentsByVersion(groupByVersionId(sortedComponents))
-      setComponentNameById(
-        new Map(
-          sortedComponents.map((c) => [
-            c.id,
-            c.component_name || 'Untitled component',
-          ]),
-        ),
-      )
-      setPacksByVersion(groupByVersionId(packs.data ?? []))
-      setPackItemsByPack(groupByPackId(packItems.data ?? []))
+      setAssembliesByVersion(groupByVersionId(assemblies.data ?? []))
       setQuantitiesByVersion(groupByVersionId(quantities.data ?? []))
       setRfeById(new Map((rfes.data ?? []).map((r) => [r.id, r])))
       setLoading(false)
@@ -214,6 +197,39 @@ function Dashboard() {
       return next
     })
   }
+
+  // Child rows (versions, quantities, components, assemblies, assembly qtys,
+  // assembly items) are removed by ON DELETE CASCADE foreign keys in the DB,
+  // so deleting the RFE row is enough.
+  const deleteRfe = async (rfeId: string) => {
+    const { error } = await supabase.from('RFEs').delete().eq('id', rfeId)
+
+    if (error) {
+      console.error(error)
+      return
+    }
+
+    setRfes((prev) => prev.filter((r) => r.rfe_id !== rfeId))
+    setVersionsByRfe((prev) => {
+      const next = new Map(prev)
+      next.delete(rfeId)
+      return next
+    })
+    setRfeById((prev) => {
+      const next = new Map(prev)
+      next.delete(rfeId)
+      return next
+    })
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      next.delete(rfeId)
+      return next
+    })
+  }
+
+  const pendingDeleteVersionCount = pendingDelete
+    ? (versionsByRfe.get(pendingDelete.rfe_id)?.length ?? 0)
+    : 0
 
   return (
     <div className="min-h-svh p-4 pt-16">
@@ -304,6 +320,13 @@ function Dashboard() {
                               >
                                 Switch to Job
                               </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onClick={() => setPendingDelete(rfe)}
+                              >
+                                Delete
+                              </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
@@ -349,14 +372,11 @@ function Dashboard() {
                                   { label: 'Flat Size', render: (r) => r.flat_size || '—' },
                                   { label: 'Stock', render: (r) => r.stock || '—' },
                                   { label: 'Coating', render: (r) => r.coating || '—' },
-                                  { label: 'Qty', render: (r) => r.quantity || '—' },
                                   { label: 'Source', render: (r) => r.source || '—' },
                                 ]}
                               />
-                              <PacksDetail
-                                packs={packsByVersion.get(rfe.id) ?? []}
-                                packItemsByPack={packItemsByPack}
-                                componentNameById={componentNameById}
+                              <AssembliesDetail
+                                assemblies={assembliesByVersion.get(rfe.id) ?? []}
                               />
                             </div>
                           </TableCell>
@@ -370,6 +390,39 @@ function Dashboard() {
           </div>
         )}
       </div>
+
+      <AlertDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete “{pendingDelete?.rfe_name || 'Untitled RFE'}”?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the RFE and all{' '}
+              {pendingDeleteVersionCount} version
+              {pendingDeleteVersionCount === 1 ? '' : 's'}, including their
+              components and assemblies. This can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className={buttonVariants({ variant: 'destructive' })}
+              onClick={() => {
+                if (pendingDelete) deleteRfe(pendingDelete.rfe_id)
+                setPendingDelete(null)
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -423,36 +476,40 @@ function DetailTable<T extends { id: string | number }>({
   )
 }
 
-function PacksDetail({
-  packs,
-  packItemsByPack,
-  componentNameById,
-}: {
-  packs: PackRow[]
-  packItemsByPack: Map<number, PackItemRow[]>
-  componentNameById: Map<string, string>
-}) {
+function AssembliesDetail({ assemblies }: { assemblies: AssemblyRow[] }) {
   return (
     <div>
       <p className="mb-1 text-xs font-medium text-muted-foreground">Builds</p>
-      {packs.length === 0 ? (
+      {assemblies.length === 0 ? (
         <p className="text-xs text-muted-foreground">None</p>
       ) : (
         <div className="flex flex-col gap-3 rounded-sm border bg-green-600/3 border-green-950/20 p-2">
-          {packs.map((pack, i) => (
-            <div key={pack.id} className="flex flex-col gap-0.5 text-sm">
+          {assemblies.map((assembly, i) => (
+            <div key={assembly.id} className="flex flex-col gap-0.5 text-sm">
               <p className="font-medium">
-                Pack {i + 1}
-                {pack.pack_type ? ` — ${pack.pack_type}` : ''} (
-                {pack.num_of_packs || '—'} packs)
+                Assembly {i + 1} (
+                {formatUnitCounts(assembly.num_of_units) ?? '—'} units)
               </p>
-              {(packItemsByPack.get(pack.id) ?? []).map((item, j) => (
+              {(assembly.unit_build ?? []).map((item, j) => (
                 <p key={j} className="pl-3 text-muted-foreground">
-                  {componentNameById.get(item.component_id) ??
-                    'Unknown component'}
-                  : {item.qty_per_pack ?? '—'} per pack
+                  {item.component_name || 'Untitled component'}: {item.qty_per_unit ?? '—'} per unit
                 </p>
               ))}
+              {(assembly.pack_type || assembly.units_per_pack) && (
+                <p className="pl-3 text-muted-foreground">
+                  Packed: {assembly.units_per_pack ?? '—'} per{' '}
+                  {assembly.pack_type || '—'}
+                </p>
+              )}
+              {(assembly.steps?.length ?? 0) > 0 && (
+                <ol className="mt-1 list-decimal pl-8 text-muted-foreground">
+                  {[...(assembly.steps ?? [])]
+                    .sort((a, b) => a.step - b.step)
+                    .map((step) => (
+                      <li key={step.step}>{step.instruction}</li>
+                    ))}
+                </ol>
+              )}
             </div>
           ))}
         </div>

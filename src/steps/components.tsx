@@ -59,8 +59,8 @@ function CardShell({
     header: (handleRef: (el: HTMLElement | null) => void) => React.ReactNode
     children: React.ReactNode,
 }) {
-// const watchedComponent = useWatch({ control, name: `components.${index}` })
-//     const displayName = watchedComponent?.name?.trim() || `Component ${index + 1}`
+    // const watchedComponent = useWatch({ control, name: `components.${index}` })
+    //     const displayName = watchedComponent?.name?.trim() || `Component ${index + 1}`
     const { ref, handleRef, isDragging } = useSortable({
         id: field.id,
         index,
@@ -144,7 +144,7 @@ function ComponentCard({
             onOpenChange={onOpenChange}
             header={(handleRef) => collapsible
                 && (<div className='flex justify-between w-full items-center'>
-                    <Button
+                    {/* <Button
                         ref={handleRef}
                         type="button"
                         variant="ghost"
@@ -156,28 +156,28 @@ function ComponentCard({
                         aria-label="Drag to reorder"
                     >
                         <GripVerticalIcon />
-                    </Button>
+                    </Button> */}
                     <CollapsibleTrigger
                         className={`flex flex-1 items-center gap-2 text-left text-sm font-medium cursor-pointer [&[data-state=open]>svg]:rotate-90 ${hasErrors ? 'text-destructive' : ''
                             }`}
                     >
+                        <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform" />
 
                         <span className={`truncate font-semibold ${!watchedComponent?.name && "text-gray-500/50"}`}>{displayName}</span>
-                        <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform" />
 
                     </CollapsibleTrigger>
 
                     {/* {kittingRequired === 'Yes' && */}
 
-                        <Button
-                            className={`${dragEnabled ? '' : 'hidden'}`}
-                            type="button"
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => remove(index)}
-                        >
-                            Remove
-                        </Button>
+                    <Button
+                        // className={`${dragEnabled ? '' : 'hidden'}`}
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => remove(index)}
+                    >
+                        Remove
+                    </Button>
 
                     {/* } */}
                     {/* Always mounted (even when disabled) so dnd-kit attaches its
@@ -197,7 +197,7 @@ function ComponentCard({
                 <div className='flex gap-4'>
                     <Field name={`components.${index}.name`}>
                         <FieldLabel htmlFor={`components.${index}.name`}>
-                            Name *
+                            Name or Description *
                         </FieldLabel>
                         <Input
                             id={`components.${index}.name`}
@@ -207,35 +207,6 @@ function ComponentCard({
                         />
                         <FieldError errors={[fieldErrors?.name]} />
                     </Field>
-                    {/* {kittingRequired === 'Yes' ? (
-                        <Field>
-                            <FieldLabel htmlFor={`components.${index}.qty`}>
-                                {qtyLabel} 
-                            </FieldLabel>
-                            <Input
-                                id={`components.${index}.qty`}
-                                type="number"
-                                {...register(`components.${index}.qty`, {
-                                    required: 'Qty is required',
-                                    valueAsNumber: true,
-                                    min: { value: 1, message: 'Qty must be positive' },
-                                })}
-                            />
-                            <span className='text-xs'>
-                                Qtys needed per tier: 
-                                {overviewQtyTiers.length > 0 && overviewQtyTiers.map((t, i) => ` ${(t.qty ?? 0) * (watchedComponent?.qty ?? 0)}${i !== overviewQtyTiers.length - 1 ? `,` : ``}`)}
-                            </span>
-                            <FieldError errors={[fieldErrors?.qty]} />
-                        </Field>
-                    ) : (
-                        <Field>
-                            <FieldLabel>{qtyLabel}</FieldLabel>
-                            <ComponentQtyDisplay
-                                index={index}
-                                tiers={overviewQtyTiers}
-                            />
-                        </Field>
-                    )} */}
                 </div>
 
                 <RadioButtonGroup
@@ -274,7 +245,7 @@ function ComponentCard({
 
                 {watchedComponent?.type === "Printed" &&
                     <>
-                        <div className='flex gap-4'>
+                        <div className='grid grid-cols-4 gap-4'>
                             <Field name={`components.${index}.finalSize`}>
                                 <FieldLabel htmlFor={`components.${index}.finalSize`}>
                                     Finished Size
@@ -361,7 +332,7 @@ function ComponentCard({
                     <FieldLabel
                         htmlFor={`components.${index}.instruction`}
                     >
-                        Instructions
+                        Additional Info (optional)
                     </FieldLabel>
 
                     <Textarea
@@ -393,8 +364,9 @@ function Components() {
     // )
 
     const [openKeys, setOpenKeys] = useState<Set<string>>(
-        () => new Set(fields[0] ? [fields[0].id] : []),
+        () => new Set(fields.length === 1 ? [fields[0].id] : []),
     )
+
 
     // When a card is added, open it (and collapse the others).
     const prevLen = useRef(fields.length)
@@ -417,7 +389,7 @@ function Components() {
                 <p className="text-sm text-muted-foreground">No components yet.</p>
             )}
 
-            <DragDropProvider
+            {/* <DragDropProvider
                 onDragEnd={(event) => {
                     if (event.canceled) return
                     const { source, target } = event.operation
@@ -436,53 +408,52 @@ function Components() {
                         move(sourceIndex, targetIndex)
                     }
                 }}
-            >
-                {fields.map((field, index) => (
-                    <ComponentCard
-                        key={field.id}
-                        field={field}
-                        index={index}
-                        dragEnabled={dragEnabled}
-                        isOpen={openKeys.has(field.id)}
-                        onOpenChange={(open) =>
-                            setOpenKeys((prev) => {
-                                const next = new Set(prev)
-                                if (open) {
-                                    next.add(field.id)
-                                } else {
-                                    next.delete(field.id)
-                                }
-                                return next
-                            })
-                        }
-                        remove={remove}
-                    />
-                ))}
-            </DragDropProvider>
-
-            {/* {kittingRequired === 'Yes' && */}
-                <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() =>
-                        append({
-                            id: crypto.randomUUID(),
-                            name: '',
-                            finalSize: '',
-                            flatSize: '',
-                            stock: '',
-                            coating: '',
-                            qty: 1,
-                            source: '',
-                            sourceJobNumber: '',
-                            instruction: '',
-                            type: '',
-                            otherType: '',
+            > */}
+            {fields.map((field, index) => (
+                <ComponentCard
+                    key={field.id}
+                    field={field}
+                    index={index}
+                    dragEnabled={dragEnabled}
+                    isOpen={openKeys.has(field.id)}
+                    onOpenChange={(open) =>
+                        setOpenKeys((prev) => {
+                            const next = new Set(prev)
+                            if (open) {
+                                next.add(field.id)
+                            } else {
+                                next.delete(field.id)
+                            }
+                            return next
                         })
                     }
-                >
-                    Add component
-                </Button>
+                    remove={remove}
+                />
+            ))}
+            {/* </DragDropProvider> */}
+
+            {/* {kittingRequired === 'Yes' && */}
+            <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                    append({
+                        id: crypto.randomUUID(),
+                        name: '',
+                        finalSize: '',
+                        flatSize: '',
+                        stock: '',
+                        coating: '',
+                        source: '',
+                        sourceJobNumber: '',
+                        instruction: '',
+                        type: '',
+                        otherType: '',
+                    })
+                }
+            >
+                Add component
+            </Button>
             {/* // } */}
 
 
