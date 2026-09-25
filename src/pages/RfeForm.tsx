@@ -10,12 +10,19 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import type { ComponentSource, FormValues } from '@/lib/form'
+import type {
+  ComponentSource,
+  FormValues,
+  QtyTier,
+  SavedTotalPacks,
+  SavedUnitBuildItem,
+  SavedUnitCount,
+} from '@/lib/form'
 import { supabase } from '@/lib/supabase'
 
 import Overview from '../steps/overview'
 import Components from '../steps/components'
-import Packs from '../steps/packs'
+import Assemblies, { PACK_TYPES, derivedTotalPacks } from '../steps/assembly'
 import Shipping from '../steps/shipping'
 
 type Step = {
@@ -23,6 +30,8 @@ type Step = {
   description: string
   Component: () => ReactNode
   fields: (keyof FormValues)[]
+  isVisible?: (values: FormValues) => boolean
+
 }
 
 const STEPS: Step[] = [
@@ -49,10 +58,11 @@ const STEPS: Step[] = [
     fields: ['components'],
   },
   {
-    title: 'Packs',
-    description: 'How will the components in this job be packed?',
-    Component: Packs,
-    fields: ['packs'],
+    title: 'Assembly',
+    description: 'How will the components in this job be assembled together?',
+    Component: Assemblies,
+    fields: ['assemblies'],
+    // isVisible: (values) => values.components.length > 1,
   },
   {
     title: 'Shipping',
@@ -72,20 +82,13 @@ const STEPS: Step[] = [
   },
 ]
 
-// Matches the radio options in steps/packs.tsx. A pack_type outside this set
-// means the user typed a custom "Other" value on save — since that value is
-// folded straight into `pack_type` (there's no separate stored column for
-// it), the only way back is to treat anything unrecognized as "Other" text.
-const KNOWN_PACK_TYPES = ['Shrink Wrap', 'Banded', 'Convenient Cartons', 'Other']
-
 const defaultComponent = () => ({
   id: crypto.randomUUID(),
-  name: 'Component 1',
+  name: '',
   finalSize: '',
   flatSize: '',
   stock: '',
   coating: '',
-  qty: 1,
   source: '' as ComponentSource,
   sourceJobNumber: '',
   instruction: '',
@@ -94,12 +97,28 @@ const defaultComponent = () => ({
 })
 
 
-const defaultPack = () => ({
+const defaultAssembly = (qty: QtyTier[] = [{}]) => ({
   id: crypto.randomUUID(),
-  type: '',
-  qty: 1,
+  qty,
   items: [],
+  steps: [{ instruction: '' }],
+  packType: '',
 })
+
+// Shape of `Assemblies.steps` (jsonb). Sorted by `step` on load so edits come
+// back in the saved order regardless of how the array was stored.
+type SavedAssemblyStep = { step: number; instruction: string }
+
+const loadAssemblySteps = (assembly: { steps?: unknown; instructions?: string | null }) => {
+  const saved = Array.isArray(assembly.steps) ? (assembly.steps as SavedAssemblyStep[]) : []
+  if (saved.length > 0) {
+    return [...saved]
+      .sort((a, b) => Number(a.step) - Number(b.step))
+      .map((step) => ({ instruction: step.instruction ?? '' }))
+  }
+  // Assemblies saved before `steps` existed only have free-text instructions.
+  return [{ instruction: assembly.instructions ?? '' }]
+}
 
 // A fully-specified blank form, explicitly clearing every field rather than
 // omitting fields and relying on reset() to clear whatever isn't listed —
@@ -122,7 +141,7 @@ const blankFormValues = (): FormValues => ({
   qty: [{}],
   components: [defaultComponent()],
   // convenientCartons: false,
-  packs: [defaultPack()],
+  assemblies: [defaultAssembly()],
   totalShipments: undefined,
   shipMethod: undefined,
   asnRequired: false,
@@ -163,6 +182,9 @@ function RfeForm() {
       rfeId: isEditing && sourceRfeId ? sourceRfeId : crypto.randomUUID(),
     },
   })
+
+
+
   const [stepIndex, setStepIndex] = useState(0)
   const [loading, setLoading] = useState(isEditing || isDuplicating)
   // A new submission (including a duplicate) always creates a new RFE row;
@@ -176,20 +198,20 @@ function RfeForm() {
     if (!sourceRfeId || (!isEditing && !isDuplicating)) return
 
     const loadFromSource = async () => {
-      const [versionsRes, componentsRes, packsRes, packItemsRes, quantitiesRes] =
+      const [versionsRes, componentsRes, assembliesRes, quantitiesRes] =
         await Promise.all([
           supabase.from('RFE Versions').select('*').eq('rfe_id', sourceRfeId),
           supabase.from('Components').select('*'),
-          supabase.from('Packs').select('*'),
-          supabase.from('Pack Items').select('*'),
+          // `Assemblies.id` is DB-generated and increasing, so it preserves
+          // the order the assemblies were saved in.
+          supabase.from('Assemblies').select('*').order('id', { ascending: true }),
           supabase.from('RFE Quantities').select('*'),
         ])
 
       for (const { error } of [
         versionsRes,
         componentsRes,
-        packsRes,
-        packItemsRes,
+        assembliesRes,
         quantitiesRes,
       ]) {
         if (error) console.error(error)
@@ -214,30 +236,24 @@ function RfeForm() {
       const components = (componentsRes.data ?? [])
         .filter((c) => c.version_id === latestVersion.id)
         .sort((a, b) => Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0))
-      const packs = (packsRes.data ?? []).filter(
+      const assemblies = (assembliesRes.data ?? []).filter(
         (p) => p.version_id === latestVersion.id,
       )
-      const packItems = packItemsRes.data ?? []
 
       const quantities = (quantitiesRes.data ?? []).filter(
         (q) => q.version_id === latestVersion.id,
       )
-      const overviewQtyValues = quantities.map((q) => q.quantity ?? null)
-      const kittingRequired = (latestVersion.kitting_required ?? undefined) as
-        | 'Yes'
-        | 'No'
-        | undefined
 
-      // Every save inserts brand new Components/Packs rows for the new
+      // Every save inserts brand new Components/Assemblies rows for the new
       // version, so the loaded (previous version's) component ids can't be
-      // reused — remap them and translate pack items' references along with
+      // reused — remap them and translate assembly items' references along with
       // them.
       const componentIdMap = new Map<string, string>()
       const newComponents = components.map((component) => {
         const id = crypto.randomUUID()
         componentIdMap.set(component.id, id)
 
-        const base = {
+        return {
           id,
           name: component.component_name ?? '',
           finalSize: component.final_size ?? '',
@@ -251,28 +267,6 @@ function RfeForm() {
           otherType: component.other_type ?? '',
         }
 
-        if (kittingRequired !== 'No') {
-          return { ...base, qty: Number(component.quantity) || 1 }
-        }
-
-        // Non-kit quantity is stored as pipe-delimited text, one value per
-        // overview qty tier (see onSubmit below). Reconstitute it back into
-        // per-tier overrides so editing preserves which tiers were manually
-        // overridden vs. tracking the overview quantity automatically.
-        const parsedValues: (number | null)[] = String(component.quantity ?? '')
-          .split('|')
-          .map((part: string) => part.trim())
-          .map((part: string) => {
-            const n = Number(part)
-            return part !== '' && !Number.isNaN(n) ? n : null
-          })
-
-        const aligned = parsedValues.length === overviewQtyValues.length
-        const qtyOverrides: (number | null)[] = aligned
-          ? parsedValues.map((v, i) => (v === overviewQtyValues[i] ? null : v))
-          : overviewQtyValues.map((_, i) => parsedValues[i] ?? null)
-
-        return { ...base, qty: 1, qtyOverrides }
       })
 
       methods.reset({
@@ -301,21 +295,32 @@ function RfeForm() {
             : [{}],
         components: newComponents.length > 0 ? newComponents : [defaultComponent()],
         // convenientCartons: latestVersion.convenient_cartons ?? false,
-        packs: packs.map((pack) => {
-          const rawType = pack.pack_type ?? ''
-          const isKnownType = KNOWN_PACK_TYPES.includes(rawType)
+        assemblies: assemblies.map((assembly) => {
+          const rawPackType: string = assembly.pack_type ?? ''
+          const isKnownPackType = rawPackType === '' || PACK_TYPES.includes(rawPackType)
+          const savedUnits: SavedUnitCount[] = Array.isArray(assembly.num_of_units)
+            ? assembly.num_of_units
+            : []
+          const savedBuild: SavedUnitBuildItem[] = Array.isArray(assembly.unit_build)
+            ? assembly.unit_build
+            : []
           return {
             id: crypto.randomUUID(),
-            type: isKnownType ? rawType : 'Other',
-            typeOther: isKnownType ? undefined : rawType,
-            qty: Number(pack.num_of_packs) || 1,
-            items: packItems
-              .filter((item) => item.pack_id === pack.id)
-              .map((item) => ({
-                componentId:
-                  componentIdMap.get(item.component_id) ?? item.component_id,
-                qtyPerPack: Number(item.qty_per_pack) || 1,
-              })),
+            // Aligned to the overview tiers by index, same as they were saved.
+            qty: quantities.map((_, i) => {
+              const units = savedUnits[i]?.units
+              return { qty: units != null ? Number(units) : undefined }
+            }),
+            items: savedBuild.map((item) => ({
+              componentId:
+                componentIdMap.get(item.component_id) ?? item.component_id,
+              qtyPerUnit: item.qty_per_unit != null ? Number(item.qty_per_unit) : 1,
+            })),
+            steps: loadAssemblySteps(assembly),
+            packType: isKnownPackType ? rawPackType : 'Other',
+            packTypeOther: isKnownPackType ? undefined : rawPackType,
+            unitsPerPack:
+              assembly.units_per_pack != null ? Number(assembly.units_per_pack) : undefined,
           }
         }),
         totalShipments:
@@ -341,32 +346,39 @@ function RfeForm() {
     loadFromSource()
   }, [sourceRfeId, isEditing, isDuplicating, methods])
 
-  const step = STEPS[stepIndex]
+  const visibleSteps = STEPS.filter(
+    (s) => !s.isVisible ||
+      s.isVisible(methods.getValues()),
+  )
+  const step = visibleSteps[stepIndex]
   const StepComponent = step.Component
   const isFirst = stepIndex === 0
-  const isLast = stepIndex === STEPS.length - 1
+  const isLast = stepIndex === visibleSteps.length - 1
+
+
+
 
   const onSubmit = async (data: FormValues) => {
     // "Other" is a placeholder selection, not a real pack type — fold the
-    // free-text value into `type` so the submitted string is what to use.
-    const packs = data.packs.map(({ typeOther, ...pack }) =>
-      pack.type === 'Other' ? { ...pack, type: typeOther ?? '' } : pack,
+    // free-text value into `packType` so the submitted string is what to use.
+    const assemblies = data.assemblies.map(({ packTypeOther, ...assembly }) => ({
+      ...assembly,
+      packType: assembly.packType === 'Other' ? (packTypeOther ?? '') : assembly.packType,
+    }))
+
+    // Units in each assembly at each overview qty tier. With a single
+    // assembly its qty inputs are hidden and it gets the full tier qty (same
+    // as the Assembly step shows), so don't trust its possibly-stale `qty`.
+    const tiers = data.qty ?? []
+    const unitQtys = (assembly: FormValues['assemblies'][number]) =>
+      tiers.map((tier, i) =>
+        Number(assemblies.length > 1 ? assembly.qty[i]?.qty : tier.qty) || 0,
+      )
+    const componentNameById = new Map(
+      data.components.map((component) => [component.id, component.name]),
     )
 
-    // Kit mode stores a single qty-per-kit number. Non-kit mode stores one
-    // value per overview qty tier (an override where set, else that tier's
-    // own value), pipe-delimited — `Components.quantity` is a text column.
-    const componentQuantity = (component: FormValues['components'][number]) => {
-      const tiers = data.qty ?? []
-      if (data.kittingRequired !== 'No' || tiers.length === 0) {
-        return component.qty
-      }
-      return tiers
-        .map((tier, i) => component.qtyOverrides?.[i] ?? tier.qty ?? '')
-        .join(' | ')
-    }
-
-    console.log({ ...data, packs })
+    console.log({ ...data, assemblies })
 
     if (isNewRfe) {
       const { error: rfeError } = await supabase
@@ -445,7 +457,6 @@ function RfeForm() {
         coating: component.coating,
         flat_size: component.flatSize,
         job_number: component.sourceJobNumber,
-        quantity: componentQuantity(component),
         source: component.source,
         sort_order: String(index),
         instruction: component.instruction,
@@ -456,42 +467,51 @@ function RfeForm() {
 
     if (componentsError) console.error(componentsError)
 
-    // `Packs.id` is a DB-generated integer, not a client id, so packs are
-    // inserted one at a time to get back the real id each pack's items need
-    // to link against. Uses the folded `packs` (not `data.packs`) so a
-    // custom "Other" pack type is actually saved instead of the literal
-    // string "Other".
-    for (const pack of packs) {
-      const { data: insertedPack, error: packError } = await supabase
-        .from('Packs')
-        .insert({
+    // Uses the folded `assemblies` (not `data.assemblies`) so a custom "Other"
+    // pack type is actually saved instead of the literal string
+    // "Other".
+    const { error: assembliesError } = await supabase.from('Assemblies').insert(
+      assemblies.map((assembly) => {
+        // This assembly's units at each tier, keyed by the overview tier qty.
+        const tierUnits = unitQtys(assembly).map((units, i) => ({
+          unitTier: Number(tiers[i]?.qty) || 0,
+          units,
+        }))
+
+        return {
           version_id: data.versionId,
-          num_of_packs: pack.qty,
-          pack_type: pack.type,
-        })
-        .select('id')
-        .single()
+          num_of_units: tierUnits.map(({ unitTier, units }): SavedUnitCount => ({
+            unit_tier: unitTier,
+            units,
+          })),
+          unit_build: assembly.items.map((item): SavedUnitBuildItem => {
+            const qtyPerUnit = Number(item.qtyPerUnit) || 0
+            return {
+              component_id: item.componentId,
+              component_name: componentNameById.get(item.componentId) ?? '',
+              qty_per_unit: qtyPerUnit,
+              pieces: tierUnits.map(({ unitTier, units }) => ({
+                unit_tier: unitTier,
+                total_pieces: units * qtyPerUnit,
+              })),
+            }
+          }),
+          pack_type: assembly.packType,
+          units_per_pack: assembly.unitsPerPack,
+          total_packs: tierUnits.map(({ unitTier, units }): SavedTotalPacks => ({
+            unit_tier: unitTier,
+            total_packs: derivedTotalPacks(units, assembly.unitsPerPack),
+          })),
+          // Blank steps are dropped and the rest renumbered from 1.
+          steps: assembly.steps
+            .map((step) => step.instruction.trim())
+            .filter(Boolean)
+            .map((instruction, index) => ({ step: index + 1, instruction })),
+        }
+      }),
+    )
 
-      if (packError) {
-        console.error(packError)
-        continue
-      }
-
-      if (pack.items.length === 0) continue
-
-      // `Pack Items.id` is also DB-generated (bigint), unlike most other
-      // tables here which use client-generated UUIDs — don't set it.
-      const { error: packItemsError } = await supabase.from('Pack Items').insert(
-        pack.items.map((item) => ({
-          qty_per_pack: item.qtyPerPack,
-          version_id: data.versionId,
-          pack_id: insertedPack.id,
-          component_id: item.componentId,
-        })),
-      )
-
-      if (packItemsError) console.error(packItemsError)
-    }
+    if (assembliesError) console.error(assembliesError)
 
     const { error: quantitiesError } = await supabase.from('RFE Quantities').insert(
       (data.qty ?? [])
@@ -511,7 +531,7 @@ function RfeForm() {
   const next = async () => {
     // Only advance if the current step's fields pass validation.
     const valid = await methods.trigger(step.fields)
-    if (valid) setStepIndex((i) => Math.min(i + 1, STEPS.length - 1))
+    if (valid) setStepIndex((i) => Math.min(i + 1, visibleSteps.length - 1))
   }
 
   const back = () => setStepIndex((i) => Math.max(i - 1, 0))
@@ -525,13 +545,15 @@ function RfeForm() {
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center py-20 bg-taupe-100">
-      <Card className="w-full max-w-2xl">
+    <div className="flex min-h-svh items-center justify-center bg-taupe-100">
+      {/* <Preview getValues={methods.getValues}/>  */}
+
+      <Card className="w-full p-3 max-w-2xl">
         <CardHeader>
-          <CardTitle>{step.title}</CardTitle>
+          <CardTitle className='text-xl'>{step.title}</CardTitle>
           <CardDescription>{step.description}</CardDescription>
           <p className="text-sm text-muted-foreground">
-            Step {stepIndex + 1} of {STEPS.length}
+            Step {stepIndex + 1} of {visibleSteps.length}
           </p>
         </CardHeader>
         <CardContent>
@@ -555,7 +577,7 @@ function RfeForm() {
                   )
                 ) {
                   e.preventDefault()
-                  
+
                 }
                 // navigate("/dashboard", { replace: true });
               }}
@@ -601,6 +623,7 @@ function RfeForm() {
         </CardContent>
       </Card>
     </div>
+
   )
 }
 

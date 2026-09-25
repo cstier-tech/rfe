@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronRightIcon, GripVerticalIcon, PencilIcon } from 'lucide-react'
+import { ChevronRightIcon, GripVerticalIcon } from 'lucide-react'
 import { DragDropProvider } from '@dnd-kit/react'
 import { useSortable } from '@dnd-kit/react/sortable'
 import { Input } from '@/components/ui/input'
@@ -12,119 +12,13 @@ import {
     CollapsibleContent,
 } from '@/components/ui/collapsible'
 import {
-    Popover,
-    PopoverContent,
-    PopoverHeader,
-    PopoverTitle,
-    PopoverTrigger,
-} from '@/components/ui/popover'
-import {
     useFormContext,
     useFieldArray,
     useWatch,
     type FieldArrayWithId,
 } from 'react-hook-form'
-import type { FormValues, QtyTier } from '@/lib/form'
+import type { FormValues } from '@/lib/form'
 import { Textarea } from '@/components/ui/textarea'
-
-// Displayed (and editable via the popover) when kitting isn't required: the
-// component's effective qty per overview quantity tier, pipe-delimited. Each
-// tier can be individually overridden; an un-overridden tier tracks the
-// overview quantity automatically.
-function ComponentQtyDisplay({
-    index,
-    tiers,
-}: {
-    index: number
-    tiers: QtyTier[]
-}) {
-    const { control, setValue } = useFormContext<FormValues>()
-    const overrides = useWatch({
-        control,
-        name: `components.${index}.qtyOverrides`,
-    })
-    const [open, setOpen] = useState(false)
-    const [draft, setDraft] = useState<string[]>([])
-
-    const effective = tiers.map((tier, i) => overrides?.[i] ?? tier?.qty ?? null)
-    const displayText =
-        effective.length > 0
-            ? effective.map((v) => (v ?? '—')).join(' | ')
-            : '—'
-
-    const handleOpenChange = (next: boolean) => {
-        if (next) {
-            setDraft(effective.map((v) => (v != null ? String(v) : '')))
-        }
-        setOpen(next)
-    }
-
-    const handleSave = () => {
-        setValue(
-            `components.${index}.qtyOverrides`,
-            draft.map((v) => {
-                const n = Number(v)
-                return v.trim() !== '' && !Number.isNaN(n) ? n : null
-            }),
-            { shouldDirty: true },
-        )
-        setOpen(false)
-    }
-
-    return (
-        <div className="flex items-center gap-1.5">
-            <span className="text-sm">{displayText}</span>
-            <Popover open={open} onOpenChange={handleOpenChange}>
-                <PopoverTrigger asChild>
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-xs"
-                        aria-label="Override quantity"
-                    >
-                        <PencilIcon />
-                    </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-64">
-                    <PopoverHeader>
-                        <PopoverTitle>Override Quantity</PopoverTitle>
-                    </PopoverHeader>
-                    <div className="flex flex-col gap-2">
-                        {tiers.length === 0 && (
-                            <p className="text-sm text-muted-foreground">
-                                No quantities entered on the overview step yet.
-                            </p>
-                        )}
-                        {tiers.map((_, i) => (
-                            <Input
-                                key={i}
-                                type="number"
-                                aria-label={`Override quantity ${i + 1}`}
-                                value={draft[i] ?? ''}
-                                onChange={(e) => {
-                                    const value = e.target.value
-                                    setDraft((prev) => {
-                                        const next = [...prev]
-                                        next[i] = value
-                                        return next
-                                    })
-                                }}
-                            />
-                        ))}
-                    </div>
-                    <Button
-                        type="button"
-                        size="sm"
-                        onClick={handleSave}
-                        disabled={tiers.length === 0}
-                    >
-                        Save
-                    </Button>
-                </PopoverContent>
-            </Popover>
-        </div>
-    )
-}
 
 const SOURCE_OPTIONS = [
     'LCP Production',
@@ -142,6 +36,7 @@ const TYPE_OPTIONS = [
     { label: 'Promo', value: 'Promo' },
     { label: 'Apparel', value: 'Apparel' },
     { label: 'Product Sample', value: 'Product Sample' },
+    { label: 'Packing Materials', value: 'Packing Materials' },
     { label: 'Other', value: 'Other' },
 ]
 
@@ -162,10 +57,10 @@ function CardShell({
     isOpen: boolean
     onOpenChange: (open: boolean) => void
     header: (handleRef: (el: HTMLElement | null) => void) => React.ReactNode
-    children: React.ReactNode
+    children: React.ReactNode,
 }) {
-
-    // const displayName = watchedComponent?.name?.trim() || `Component ${index + 1}`
+    // const watchedComponent = useWatch({ control, name: `components.${index}` })
+    //     const displayName = watchedComponent?.name?.trim() || `Component ${index + 1}`
     const { ref, handleRef, isDragging } = useSortable({
         id: field.id,
         index,
@@ -183,7 +78,7 @@ function CardShell({
                 <div className="flex items-center justify-between gap-2 p-3">
                     {header(handleRef)}
                 </div>
-                <CollapsibleContent className="flex flex-col gap-2 p-3 pt-0">
+                <CollapsibleContent className="flex flex-col gap-4 p-3 pt-0">
                     {children}
                 </CollapsibleContent>
             </Collapsible>
@@ -197,7 +92,7 @@ function CardShell({
             <div className="flex items-center justify-between gap-2 p-3">
                 {header(handleRef)}
             </div>
-            <div className="flex flex-col gap-2 p-3 pt-0">
+            <div className="flex flex-col gap-4 p-3 pt-0">
                 {children}
             </div>
         </div>
@@ -218,7 +113,6 @@ function ComponentCard({
     isOpen: boolean
     onOpenChange: (open: boolean) => void
     remove: (index: number) => void
-
 }) {
     const {
         register,
@@ -234,52 +128,65 @@ function ComponentCard({
     // })
 
     const watchedComponent = useWatch({ control, name: `components.${index}` })
-    const kittingRequired = useWatch({ control, name: 'kittingRequired' })
-    const qtyLabel = kittingRequired === 'Yes' ? 'Qty per kit *' : 'Qty *'
-    const overviewQtyTiers = useWatch({ control, name: 'qty' }) ?? []
-
     const fieldErrors = errors.components?.[index]
     const hasErrors = !!fieldErrors && Object.keys(fieldErrors).length > 0
-    const displayName = watchedComponent?.name?.trim() || `Component ${index + 1}`
-    const collapsible = kittingRequired === 'Yes'
+    const displayName = watchedComponent?.name?.trim() || "unnamed component"
+    const collapsible = true
 
 
     return (
         <CardShell
-        dragEnabled={dragEnabled}
+            dragEnabled={dragEnabled}
             field={field}
             index={index}
             collapsible={collapsible}
             isOpen={isOpen}
             onOpenChange={onOpenChange}
             header={(handleRef) => collapsible
-                ? (<>
-                    <CollapsibleTrigger
-                        className={`flex flex-1 items-center gap-2 text-left text-sm font-medium [&[data-state=open]>svg]:rotate-90 ${hasErrors ? 'text-destructive' : ''
-                            }`}
-                    >
-                        <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform" />
-                        <span className="truncate">{displayName}</span>
-                    </CollapsibleTrigger>
-                    {/* Always mounted (even when disabled) so dnd-kit attaches its
-                    drag-activator role/ARIA attributes to this handle from
-                    the start, rather than briefly to the whole card and
-                    leaving them stranded there once a handle appears. */}
-                    <Button
+                && (<div className='flex justify-between w-full items-center'>
+                    {/* <Button
                         ref={handleRef}
                         type="button"
                         variant="ghost"
                         size="icon-sm"
-                        className={`cursor-grab touch-none active:cursor-grabbing ${dragEnabled ? '' : 'invisible'
+                        className={`cursor-grab touch-none opacity-50 active:cursor-grabbing ${dragEnabled ? '' : 'hidden'
                             }`}
                         tabIndex={dragEnabled ? 0 : -1}
                         aria-hidden={!dragEnabled}
                         aria-label="Drag to reorder"
                     >
                         <GripVerticalIcon />
+                    </Button> */}
+                    <CollapsibleTrigger
+                        className={`flex flex-1 items-center gap-2 text-left text-sm font-medium cursor-pointer [&[data-state=open]>svg]:rotate-90 ${hasErrors ? 'text-destructive' : ''
+                            }`}
+                    >
+                        <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform" />
+
+                        <span className={`truncate font-semibold ${!watchedComponent?.name && "text-gray-500/50"}`}>{displayName}</span>
+
+                    </CollapsibleTrigger>
+
+                    {/* {kittingRequired === 'Yes' && */}
+
+                    <Button
+                        // className={`${dragEnabled ? '' : 'hidden'}`}
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => remove(index)}
+                    >
+                        Remove
                     </Button>
-                </>)
-                : ''
+
+                    {/* } */}
+                    {/* Always mounted (even when disabled) so dnd-kit attaches its
+                    drag-activator role/ARIA attributes to this handle from
+                    the start, rather than briefly to the whole card and
+                    leaving them stranded there once a handle appears. */}
+
+                </div>)
+
             }
         >
             {<>
@@ -288,9 +195,9 @@ function ComponentCard({
                     {...register(`components.${index}.id`)}
                 />
                 <div className='flex gap-4'>
-                    <Field>
+                    <Field name={`components.${index}.name`}>
                         <FieldLabel htmlFor={`components.${index}.name`}>
-                            Name *
+                            Name or Description *
                         </FieldLabel>
                         <Input
                             id={`components.${index}.name`}
@@ -300,31 +207,6 @@ function ComponentCard({
                         />
                         <FieldError errors={[fieldErrors?.name]} />
                     </Field>
-                    {kittingRequired === 'Yes' ? (
-                        <Field>
-                            <FieldLabel htmlFor={`components.${index}.qty`}>
-                                {qtyLabel}
-                            </FieldLabel>
-                            <Input
-                                id={`components.${index}.qty`}
-                                type="number"
-                                {...register(`components.${index}.qty`, {
-                                    required: 'Qty is required',
-                                    valueAsNumber: true,
-                                    min: { value: 1, message: 'Qty must be positive' },
-                                })}
-                            />
-                            <FieldError errors={[fieldErrors?.qty]} />
-                        </Field>
-                    ) : (
-                        <Field>
-                            <FieldLabel>{qtyLabel}</FieldLabel>
-                            <ComponentQtyDisplay
-                                index={index}
-                                tiers={overviewQtyTiers}
-                            />
-                        </Field>
-                    )}
                 </div>
 
                 <RadioButtonGroup
@@ -345,7 +227,7 @@ function ComponentCard({
 
                 {(watchedComponent?.type === 'Other') &&
 
-                    <Field className='max-w-64'>
+                    <Field name={`components.${index}.otherType`} className='max-w-64'>
                         <FieldLabel
                             htmlFor={`components.${index}.otherType`}
                         >
@@ -363,8 +245,8 @@ function ComponentCard({
 
                 {watchedComponent?.type === "Printed" &&
                     <>
-                        <div className='flex gap-4'>
-                            <Field>
+                        <div className='grid grid-cols-4 gap-4'>
+                            <Field name={`components.${index}.finalSize`}>
                                 <FieldLabel htmlFor={`components.${index}.finalSize`}>
                                     Finished Size
                                 </FieldLabel>
@@ -375,7 +257,7 @@ function ComponentCard({
                                 <FieldError errors={[fieldErrors?.finalSize]} />
                             </Field>
 
-                            <Field>
+                            <Field name={`components.${index}.flatSize`}>
                                 <FieldLabel htmlFor={`components.${index}.flatSize`}>
                                     Flat Size
                                 </FieldLabel>
@@ -385,10 +267,8 @@ function ComponentCard({
                                 />
                                 <FieldError errors={[fieldErrors?.flatSize]} />
                             </Field>
-                        </div>
 
-                        <div className='flex gap-4'>
-                            <Field>
+                            <Field name={`components.${index}.stock`}>
                                 <FieldLabel htmlFor={`components.${index}.stock`}>
                                     Stock
                                 </FieldLabel>
@@ -399,7 +279,7 @@ function ComponentCard({
                                 <FieldError errors={[fieldErrors?.stock]} />
                             </Field>
 
-                            <Field>
+                            <Field name={`components.${index}.coating`}>
                                 <FieldLabel htmlFor={`components.${index}.coating`}>
                                     Coating
                                 </FieldLabel>
@@ -432,7 +312,7 @@ function ComponentCard({
                 />
 
                 {watchedComponent?.source === 'LCP Production' && (
-                    <Field className='max-w-64'>
+                    <Field name={`components.${index}.sourceJobNumber`} className='max-w-64'>
                         <FieldLabel
                             htmlFor={`components.${index}.sourceJobNumber`}
                         >
@@ -448,11 +328,11 @@ function ComponentCard({
                     </Field>
                 )}
 
-                <Field className=''>
+                <Field name={`components.${index}.instruction`} className=''>
                     <FieldLabel
                         htmlFor={`components.${index}.instruction`}
                     >
-                        Instructions
+                        Additional Info (optional)
                     </FieldLabel>
 
                     <Textarea
@@ -464,18 +344,7 @@ function ComponentCard({
                     <FieldError errors={[fieldErrors?.instruction]} />
                 </Field>
 
-                {kittingRequired === 'Yes' &&
-                    <div className="flex justify-end pt-2">
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => remove(index)}
-                        >
-                            Remove
-                        </Button>
-                    </div>
-                }
+
             </>}
         </CardShell>
     )
@@ -490,22 +359,29 @@ function Components() {
     })
 
     // Which card is expanded. Only one at a time; null means all collapsed.
-    const [openKey, setOpenKey] = useState<string | null>(
-        () => fields[0]?.id ?? null,
+    // const [openKey, setOpenKey] = useState<string | null>(
+    //     () => fields[0]?.id ?? null,
+    // )
+
+    const [openKeys, setOpenKeys] = useState<Set<string>>(
+        () => new Set(fields.length === 1 ? [fields[0].id] : []),
     )
+
 
     // When a card is added, open it (and collapse the others).
     const prevLen = useRef(fields.length)
     useEffect(() => {
         if (fields.length > prevLen.current) {
-            setOpenKey(fields[fields.length - 1]?.id ?? null)
+            // setOpenKey(fields[fields.length - 1]?.id ?? null)
+            const newField = fields[fields.length - 1]
+            if (newField) {
+                setOpenKeys((prev) => new Set(prev).add(newField.id))
+            }
         }
         prevLen.current = fields.length
     }, [fields])
 
     const dragEnabled = fields.length > 1
-
-    const kittingRequired = useWatch({ control, name: 'kittingRequired' })
 
     return (
         <div className="flex flex-col gap-4">
@@ -513,7 +389,7 @@ function Components() {
                 <p className="text-sm text-muted-foreground">No components yet.</p>
             )}
 
-            <DragDropProvider
+            {/* <DragDropProvider
                 onDragEnd={(event) => {
                     if (event.canceled) return
                     const { source, target } = event.operation
@@ -532,44 +408,53 @@ function Components() {
                         move(sourceIndex, targetIndex)
                     }
                 }}
-            >
-                {fields.map((field, index) => (
-                    <ComponentCard
-                        key={field.id}
-                        field={field}
-                        index={index}
-                        dragEnabled={dragEnabled}
-                        isOpen={openKey === field.id}
-                        onOpenChange={(open) => setOpenKey(open ? field.id : null)}
-                        remove={remove}
-                    />
-                ))}
-            </DragDropProvider>
-
-            {kittingRequired === 'Yes' &&
-                <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() =>
-                        append({
-                            id: crypto.randomUUID(),
-                            name: `Component ${fields.length + 1}`,
-                            finalSize: '',
-                            flatSize: '',
-                            stock: '',
-                            coating: '',
-                            qty: 1,
-                            source: '',
-                            sourceJobNumber: '',
-                            instruction: '',
-                            type: '',
-                            otherType: '',
+            > */}
+            {fields.map((field, index) => (
+                <ComponentCard
+                    key={field.id}
+                    field={field}
+                    index={index}
+                    dragEnabled={dragEnabled}
+                    isOpen={openKeys.has(field.id)}
+                    onOpenChange={(open) =>
+                        setOpenKeys((prev) => {
+                            const next = new Set(prev)
+                            if (open) {
+                                next.add(field.id)
+                            } else {
+                                next.delete(field.id)
+                            }
+                            return next
                         })
                     }
-                >
-                    Add component
-                </Button>
-            }
+                    remove={remove}
+                />
+            ))}
+            {/* </DragDropProvider> */}
+
+            {/* {kittingRequired === 'Yes' && */}
+            <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                    append({
+                        id: crypto.randomUUID(),
+                        name: '',
+                        finalSize: '',
+                        flatSize: '',
+                        stock: '',
+                        coating: '',
+                        source: '',
+                        sourceJobNumber: '',
+                        instruction: '',
+                        type: '',
+                        otherType: '',
+                    })
+                }
+            >
+                Add component
+            </Button>
+            {/* // } */}
 
 
         </div>

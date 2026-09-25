@@ -86,7 +86,7 @@
     --muted-foreground: oklch(0.497 0.004 197.035);
     --accent: var(--lcp-primary-white);
     --accent-foreground: var(--lcp-primary-dark);
-    --destructive: var(--lcp-primary-red);
+    --destructive: var(--color-red-700);
     --border: var(--lcp-primary-lightgray);
     --input: var(--lcp-primary-light);
     --ring: oklch(0.708 0 0);

@@ -1,6 +1,14 @@
-import { useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
+
+import {
+  formatUnitCounts,
+  type SavedUnitBuildItem,
+  type SavedUnitCount,
+} from '@/lib/form'
 import { supabase } from '@/lib/supabase'
 
 type RfeVersionRow = {
@@ -16,8 +24,6 @@ type RfeVersionRow = {
   changes_from_prev: string | null
   description: string | null
   due_date: string | null
-  kitting_required: string | null
-  convenient_cartons: boolean | null
   num_of_shipments: string | number | null
   ship_method: string | null
   asn_required: boolean | null
@@ -36,7 +42,6 @@ type ComponentRow = {
   flat_size: string | null
   stock: string | null
   coating: string | null
-  quantity: string | null
   source: string | null
   job_number: string | null
   sort_order: string | null
@@ -44,28 +49,57 @@ type ComponentRow = {
   other_type: string | null
 }
 
-type PackRow = {
+type AssemblyRow = {
   id: number
+  num_of_units: SavedUnitCount[] | null
+  unit_build: SavedUnitBuildItem[] | null
   pack_type: string | null
-  num_of_packs: string | null
-}
-
-type PackItemRow = {
-  pack_id: number
-  component_id: string
-  qty_per_pack: string | null
+  units_per_pack: string | null
+  steps: { step: number; instruction: string }[] | null
 }
 
 type QuantityRow = {
   quantity: number | null
 }
 
+// Set by the "Hide empty fields" toggle; read by every Field.
+const HideEmptyContext = createContext(false)
+
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
+  const hideEmpty = useContext(HideEmptyContext)
+  if (hideEmpty && (value === '' || value == null)) return null
+
   return (
     <p>
       <span className="font-bold">{label}:</span>{' '}
       <span>{value === '' || value == null ? '—' : value}</span>
     </p>
+  )
+}
+
+// Label/value table for a group of fields. Rows respect the same "Hide empty
+// fields" toggle as Field.
+function FieldTable({ children }: { children: React.ReactNode }) {
+  return (
+    <table className="w-full border-collapse text-sm">
+      <tbody>{children}</tbody>
+    </table>
+  )
+}
+
+function FieldRow({ label, value }: { label: string; value: React.ReactNode }) {
+  const hideEmpty = useContext(HideEmptyContext)
+  if (hideEmpty && (value === '' || value == null)) return null
+
+  return (
+    <tr>
+      <th className="w-56 border px-3 py-1 text-left align-top font-bold">
+        {label}
+      </th>
+      <td className="border px-3 py-1 whitespace-pre-wrap">
+        {value === '' || value == null ? '—' : value}
+      </td>
+    </tr>
   )
 }
 
@@ -89,9 +123,9 @@ function RfeView() {
   const [loading, setLoading] = useState(true)
   const [version, setVersion] = useState<RfeVersionRow | null>(null)
   const [components, setComponents] = useState<ComponentRow[]>([])
-  const [packs, setPacks] = useState<PackRow[]>([])
-  const [packItems, setPackItems] = useState<PackItemRow[]>([])
+  const [assemblies, setAssemblies] = useState<AssemblyRow[]>([])
   const [quantities, setQuantities] = useState<QuantityRow[]>([])
+  const [hideEmpty, setHideEmpty] = useState(false)
 
   useEffect(() => {
     if (!rfeId) return
@@ -119,24 +153,23 @@ function RfeView() {
 
       setVersion(latestVersion)
 
-      const [componentsRes, packsRes, packItemsRes, quantitiesRes] =
-        await Promise.all([
-          supabase
-            .from('Components')
-            .select('*')
-            .eq('version_id', latestVersion.id),
-          supabase.from('Packs').select('*').eq('version_id', latestVersion.id),
-          supabase
-            .from('Pack Items')
-            .select('*')
-            .eq('version_id', latestVersion.id),
-          supabase
-            .from('RFE Quantities')
-            .select('*')
-            .eq('version_id', latestVersion.id),
-        ])
+      const [componentsRes, assembliesRes, quantitiesRes] = await Promise.all([
+        supabase
+          .from('Components')
+          .select('*')
+          .eq('version_id', latestVersion.id),
+        supabase
+          .from('Assemblies')
+          .select('*')
+          .eq('version_id', latestVersion.id)
+          .order('id', { ascending: true }),
+        supabase
+          .from('RFE Quantities')
+          .select('*')
+          .eq('version_id', latestVersion.id),
+      ])
 
-      for (const { error } of [componentsRes, packsRes, packItemsRes, quantitiesRes]) {
+      for (const { error } of [componentsRes, assembliesRes, quantitiesRes]) {
         if (error) console.error(error)
       }
 
@@ -145,8 +178,7 @@ function RfeView() {
           (a, b) => Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0),
         ),
       )
-      setPacks(packsRes.data ?? [])
-      setPackItems(packItemsRes.data ?? [])
+      setAssemblies(assembliesRes.data ?? [])
       setQuantities(quantitiesRes.data ?? [])
       setLoading(false)
     }
@@ -170,151 +202,221 @@ function RfeView() {
     )
   }
 
-  const componentNameById = new Map(
-    components.map((c) => [c.id, c.component_name || 'Untitled component']),
-  )
-
   return (
-    <div className="min-h-svh p-4 pt-16 bg-gray-100 print:bg-white print:p-0">
-      <div className="mx-auto max-w-3xl bg-background text-foreground rounded-lg border p-8 print:border-0 print:rounded-none">
-        <div className="mb-6 flex items-start justify-between print:hidden">
-          <div>
-            <h1 className="text-xl font-bold">{version.rfe_name || 'Untitled RFE'}</h1>
-            <p className="text-sm text-muted-foreground">
-              Version {version.version_number ?? '—'}
-            </p>
+    <HideEmptyContext.Provider value={hideEmpty}>
+      <div className="min-h-svh p-4 pt-16 bg-gray-100 print:bg-white print:p-0">
+        <div className="mx-auto max-w-3xl bg-background text-foreground rounded-lg border p-8 print:border-0 print:rounded-none">
+          <div className="mb-6 flex items-start justify-between print:hidden">
+            <div>
+              <h1 className="text-xl font-bold">
+                {version.rfe_name || 'Untitled RFE'}
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                Version {version.version_number ?? '—'}
+              </p>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="hideEmpty"
+                  checked={hideEmpty}
+                  onCheckedChange={setHideEmpty}
+                />
+                <Label htmlFor="hideEmpty">Hide empty fields</Label>
+              </div>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="cursor-pointer rounded-lg border px-3 py-1.5 text-sm hover:bg-muted"
+              >
+                Print
+              </button>
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="cursor-pointer rounded-lg border px-3 py-1.5 text-sm hover:bg-muted"
-          >
-            Print
-          </button>
-        </div>
 
-        <div className="hidden print:block mb-6">
-          <h1 className="text-xl font-bold">{version.rfe_name || 'Untitled RFE'}</h1>
-          <p className="text-sm">Version {version.version_number ?? '—'}</p>
-        </div>
+          <div className="hidden print:block mb-6">
+            <h1 className="text-xl font-bold">
+              {version.rfe_name || 'Untitled RFE'}
+            </h1>
+            <p className="text-sm">Version {version.version_number ?? '—'}</p>
+          </div>
 
-        <div className="flex flex-col gap-6">
-          <Section title="Request for Estimate">
-            <Field label="Name" value={version.rfe_name} />
-            <Field
-              label="Due Date"
-              value={
-                version.due_date
-                  ? new Date(version.due_date).toLocaleDateString()
-                  : null
-              }
-            />
-            <Field label="Customer" value={version.customer_name} />
-            <Field label="Customer Number" value={version.customer_number} />
-            <Field label="Sales Rep" value={version.sales_rep} />
-            <Field label="Job Type" value={version.job_type} />
-            <Field label="Previous Job Number" value={version.previous_job_number} />
-            <Field label="Changes from Previous Job" value={version.changes_from_prev} />
-            <Field label="Description" value={version.description} />
-            <Field label="Kitting Required" value={version.kitting_required} />
-            {quantities.length === 0 ? (
-              <Field label="Quantities" value={null} />
-            ) : (
-              quantities.map((q, i) => (
-                <Field
-                  key={i}
-                  label={`Quantity ${i + 1}`}
-                  value={q.quantity ?? null}
+          <div className="flex flex-col gap-6">
+            <Section title="Request for Estimate">
+              <FieldTable>
+                <FieldRow label="Name" value={version.rfe_name} />
+                <FieldRow
+                  label="Due Date"
+                  value={
+                    version.due_date
+                      ? new Date(version.due_date).toLocaleDateString()
+                      : null
+                  }
                 />
-              ))
-            )}
-          </Section>
+                <FieldRow label="Customer" value={version.customer_name} />
+                <FieldRow
+                  label="Customer Number"
+                  value={version.customer_number}
+                />
+                <FieldRow label="Sales Rep" value={version.sales_rep} />
+                <FieldRow label="Job Type" value={version.job_type} />
+                <FieldRow
+                  label="Previous Job Number"
+                  value={version.previous_job_number}
+                />
+                <FieldRow
+                  label="Changes from Previous Job"
+                  value={version.changes_from_prev}
+                />
+                <FieldRow label="Description" value={version.description} />
+                {quantities.length === 0 ? (
+                  <FieldRow label="Quantities" value={null} />
+                ) : (
+                  quantities.map((q, i) => (
+                    <FieldRow
+                      key={i}
+                      label={`Quantity ${i + 1}`}
+                      value={q.quantity ?? null}
+                    />
+                  ))
+                )}
+              </FieldTable>
+            </Section>
 
-          <Section title="Components">
-            {components.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No components.</p>
-            ) : (
-              components.map((c, i) => (
-                <div key={c.id} className="flex flex-col gap-1 pb-2">
-                  <p className="font-bold underline">
-                    Component {i + 1}
-                    {c.component_name ? ` — ${c.component_name}` : ''}
-                  </p>
-                  <Field label="Name" value={c.component_name} />
-                  <Field label="Finished Size" value={c.final_size} />
-                  <Field label="Flat Size" value={c.flat_size} />
-                  <Field label="Stock" value={c.stock} />
-                  <Field label="Coating" value={c.coating} />
-                  <Field label="Qty" value={c.quantity} />
-                  <Field label="Source" value={c.source} />
-                  <Field label="Source Job Number" value={c.job_number} />
-                </div>
-              ))
-            )}
-          </Section>
-
-          <Section title="Packs">
-            <Field
-              label="Pack in Convenient Cartons"
-              value={version.convenient_cartons ? 'Yes' : 'No'}
-            />
-            {packs.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No packs.</p>
-            ) : (
-              packs.map((pack, i) => (
-                <div key={pack.id} className="flex flex-col gap-1 pb-2">
-                  <p className="font-bold underline">Pack {i + 1}</p>
-                  <Field label="Pack Type" value={pack.pack_type} />
-                  <Field label="Num of Packs" value={pack.num_of_packs} />
-                  {packItems
-                    .filter((item) => item.pack_id === pack.id)
-                    .map((item, j) => (
-                      <Field
-                        key={j}
-                        label={
-                          componentNameById.get(item.component_id) ??
-                          'Unknown component'
-                        }
-                        value={`${item.qty_per_pack ?? '—'} per pack`}
+            <Section title="Components">
+              {components.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No components.</p>
+              ) : (
+                components.map((c, i) => (
+                  <div key={c.id} className="flex flex-col gap-1 pb-2">
+                    <p className="font-bold underline">
+                      Component {i + 1}
+                      {c.component_name ? ` — ${c.component_name}` : ''}
+                    </p>
+                    <FieldTable>
+                      <FieldRow label="Name" value={c.component_name} />
+                      <FieldRow label="Finished Size" value={c.final_size} />
+                      <FieldRow label="Flat Size" value={c.flat_size} />
+                      <FieldRow label="Stock" value={c.stock} />
+                      <FieldRow label="Coating" value={c.coating} />
+                      <FieldRow label="Source" value={c.source} />
+                      <FieldRow
+                        label="Source Job Number"
+                        value={c.job_number}
                       />
-                    ))}
-                </div>
-              ))
-            )}
-          </Section>
+                    </FieldTable>
+                  </div>
+                ))
+              )}
+            </Section>
 
-          <Section title="Shipping">
-            <Field label="Total Number of Shipments" value={version.num_of_shipments} />
-            <Field label="Shipment Method" value={version.ship_method} />
-            <Field
-              label="Advanced Shipping Notice (ASN) Required"
-              value={version.asn_required ? 'Yes' : 'No'}
-            />
-            {version.asn_required && (
-              <Field label="ASN Instructions" value={version.asn_instructions} />
-            )}
-            <Field
-              label="Approval Needed Prior to Ship"
-              value={version.approval_required ? 'Yes' : 'No'}
-            />
-            <Field
-              label="International Shipment"
-              value={version.intl_shipment ? 'Yes' : 'No'}
-            />
-            {version.intl_shipment && (
-              <>
-                <Field label="USNPC Code" value={version.usnpc_code} />
-                <Field label="Customs Value" value={version.customs_value} />
-                <Field
-                  label="Customs Description"
-                  value={version.customs_description}
+            <Section title="Assemblies">
+              {assemblies.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No assemblies.</p>
+              ) : (
+                assemblies.map((assembly, i) => (
+                  <div key={assembly.id} className="flex flex-col gap-1 pb-2">
+                    <p className="font-bold underline">Assembly {i + 1}</p>
+                    {/* A lone assembly gets every unit, and a lone component is
+                      the unit itself, so unit qty only matters when both vary. */}
+                    {assemblies.length > 1 && components.length !== 1 && (
+                      <Field
+                        label="Unit Qty"
+                        value={formatUnitCounts(assembly.num_of_units)}
+                      />
+                    )}
+                    {components.length !== 1 &&
+                      (assembly.unit_build?.length ?? 0) > 0 && (
+                        <table className="mt-1 w-fit border-collapse text-sm">
+                          <thead>
+                            <tr>
+                              <th className="border px-3 py-1 text-left">
+                                Component
+                              </th>
+                              <th className="border px-3 py-1 text-left">
+                                Qty per Unit
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(assembly.unit_build ?? []).map((item, j) => (
+                              <tr key={j}>
+                                <td className="border px-3 py-1">
+                                  {item.component_name || 'Untitled component'}
+                                </td>
+                                <td className="border px-3 py-1">
+                                  {item.qty_per_unit ?? '—'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    <Field label="Pack Type" value={assembly.pack_type} />
+                    <Field
+                      label="Units per Pack"
+                      value={assembly.units_per_pack}
+                    />
+                    {(assembly.steps?.length ?? 0) === 0 ? (
+                      <Field label="Instructions" value={null} />
+                    ) : (
+                      <div>
+                        <span className="font-bold">Instructions:</span>
+                        <ol className="list-decimal pl-8">
+                          {[...(assembly.steps ?? [])]
+                            .sort((a, b) => a.step - b.step)
+                            .map((step) => (
+                              <li key={step.step}>{step.instruction}</li>
+                            ))}
+                        </ol>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </Section>
+
+            <Section title="Shipping">
+              <FieldTable>
+                <FieldRow
+                  label="Total Number of Shipments"
+                  value={version.num_of_shipments}
                 />
-              </>
-            )}
-          </Section>
+                <FieldRow label="Shipment Method" value={version.ship_method} />
+                <FieldRow
+                  label="Advanced Shipping Notice (ASN) Required"
+                  value={version.asn_required ? 'Yes' : 'No'}
+                />
+                {version.asn_required && (
+                  <FieldRow
+                    label="ASN Instructions"
+                    value={version.asn_instructions}
+                  />
+                )}
+                <FieldRow
+                  label="Approval Needed Prior to Ship"
+                  value={version.approval_required ? 'Yes' : 'No'}
+                />
+                <FieldRow
+                  label="International Shipment"
+                  value={version.intl_shipment ? 'Yes' : 'No'}
+                />
+                {version.intl_shipment && (
+                  <>
+                    <FieldRow label="USNPC Code" value={version.usnpc_code} />
+                    <FieldRow label="Customs Value" value={version.customs_value} />
+                    <FieldRow
+                      label="Customs Description"
+                      value={version.customs_description}
+                    />
+                  </>
+                )}
+              </FieldTable>
+            </Section>
+          </div>
         </div>
       </div>
-    </div>
+    </HideEmptyContext.Provider>
   )
 }
 

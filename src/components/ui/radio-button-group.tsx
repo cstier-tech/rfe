@@ -1,5 +1,5 @@
 import { cn } from "cn"
-import { Controller } from "react-hook-form"
+import { useController } from "react-hook-form"
 import type {
     Control,
     FieldPath,
@@ -8,7 +8,7 @@ import type {
 } from "react-hook-form"
 
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Field, FieldError, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field"
+import { Field, FieldError, FieldLegend, FieldSet } from "@/components/ui/field"
 
 export type RadioButtonOption = {
     label: string
@@ -44,48 +44,43 @@ function RadioButtonGroup<
     onValueChange,
     className,
 }: RadioButtonGroupProps<TFieldValues, TName>) {
+    const { field, fieldState } = useController({
+        control,
+        name,
+        rules,
+    })
+
     return (
-        <FieldSet>
-            <FieldLegend>{legend}</FieldLegend>
-            <Controller
-                control={control}
-                name={name}
-                rules={rules}
-                render={({ field, fieldState }) => (
-                    <>
-                        <RadioGroup
-                            value={field.value ?? ""}
-                            onValueChange={(value) => {
-                                field.onChange(value)
-                                onValueChange?.(value)
-                            }}
-                            className={cn("flex gap-2", className)}
+        <FieldSet data-invalid={fieldState.invalid || undefined} className="group">
+            <FieldLegend className="group-data-[invalid=true]:text-destructive">{legend}</FieldLegend>
+            <RadioGroup
+                value={field.value ?? ""}
+                onValueChange={(value) => {
+                    field.onChange(value)
+                    onValueChange?.(value)
+                }}
+                className={cn("flex gap-2 flex-wrap", className)}
+            >
+                {options.map((option) => {
+                    const id = `${name}-${option.value}`
+                    return (
+                        <Field
+                            key={option.value}
+                            name={name}
+                            orientation="radiobutton"
                         >
-                            {options.map((option) => {
-                                const id = `${name}-${option.value}`
-                                return (
-                                    <Field
-                                        key={option.value}
-                                        orientation="radiobutton"
-                                    >
-                                        <FieldLabel
-                                            htmlFor={id}
-                                            className="py-2 pl-3 cursor-pointer"
-                                        >
-                                            {option.label}
-                                        </FieldLabel>
-                                        <RadioGroupItem
-                                            value={option.value}
-                                            id={id}
-                                        />
-                                    </Field>
-                                )
-                            })}
-                        </RadioGroup>
-                        <FieldError errors={[fieldState.error]} />
-                    </>
-                )}
-            />
+                            <label
+                                htmlFor={id}
+                                className="py-2 pl-3 cursor-pointer"
+                            >
+                                {option.label}
+                            </label>
+                            <RadioGroupItem value={option.value} id={id} />
+                        </Field>
+                    )
+                })}
+            </RadioGroup>
+            <FieldError errors={[fieldState.error]} />
         </FieldSet>
     )
 }
