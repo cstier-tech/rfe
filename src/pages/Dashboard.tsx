@@ -2,7 +2,8 @@ import { Fragment, useEffect, useState } from 'react'
 import { Check, ChevronRightIcon, MoreVertical } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
-import { formatUnitCounts, type SavedUnitBuildItem, type SavedUnitCount } from '@/lib/form'
+import { formatByTier } from '@/lib/form'
+import { loadKitItems, loadQtys } from '@/lib/loadRfe'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -57,12 +58,12 @@ type ComponentRow = {
   other_type: string | null
 }
 
-type AssemblyRow = {
+type PackoutRow = {
   id: number
   version_id: string
-  num_of_units: SavedUnitCount[] | null
-  steps: { step: number; instruction: string }[] | null
-  unit_build: SavedUnitBuildItem[] | null
+  num_of_units: Parameters<typeof loadQtys>[0]
+  kitting_steps: { step: number; instruction: string }[] | null
+  kit_build: Parameters<typeof loadKitItems>[0]
   pack_type: string | null
   units_per_pack: string | null
 }
@@ -128,8 +129,8 @@ function Dashboard() {
   const [componentsByVersion, setComponentsByVersion] = useState(
     new Map<string, ComponentRow[]>(),
   )
-  const [assembliesByVersion, setAssembliesByVersion] = useState(
-    new Map<string, AssemblyRow[]>(),
+  const [packoutsByVersion, setPackoutsByVersion] = useState(
+    new Map<string, PackoutRow[]>(),
   )
   const [quantitiesByVersion, setQuantitiesByVersion] = useState(
     new Map<string, QuantityRow[]>(),
@@ -141,16 +142,16 @@ function Dashboard() {
 
   useEffect(() => {
     const load = async () => {
-      const [versions, components, assemblies, quantities, rfes] =
+      const [versions, components, packouts, quantities, rfes] =
         await Promise.all([
           supabase.from('RFE Versions').select('*'),
           supabase.from('Components').select('*'),
-          supabase.from('Assemblies').select('*').order('id', { ascending: true }),
+          supabase.from('Packouts').select('*').order('id', { ascending: true }),
           supabase.from('RFE Quantities').select('*'),
           supabase.from('RFEs').select('*'),
         ])
 
-      for (const { error } of [versions, components, assemblies, quantities, rfes]) {
+      for (const { error } of [versions, components, packouts, quantities, rfes]) {
         if (error) console.error(error)
       }
 
@@ -161,7 +162,7 @@ function Dashboard() {
       setRfes(latestPerRfe(versions.data ?? []))
       setVersionsByRfe(groupByRfeId(versions.data ?? []))
       setComponentsByVersion(groupByVersionId(sortedComponents))
-      setAssembliesByVersion(groupByVersionId(assemblies.data ?? []))
+      setPackoutsByVersion(groupByVersionId(packouts.data ?? []))
       setQuantitiesByVersion(groupByVersionId(quantities.data ?? []))
       setRfeById(new Map((rfes.data ?? []).map((r) => [r.id, r])))
       setLoading(false)
@@ -198,8 +199,8 @@ function Dashboard() {
     })
   }
 
-  // Child rows (versions, quantities, components, assemblies, assembly qtys,
-  // assembly items) are removed by ON DELETE CASCADE foreign keys in the DB,
+  // Child rows (versions, quantities, components, packouts, packout qtys,
+  // packout items) are removed by ON DELETE CASCADE foreign keys in the DB,
   // so deleting the RFE row is enough.
   const deleteRfe = async (rfeId: string) => {
     const { error } = await supabase.from('RFEs').delete().eq('id', rfeId)
@@ -375,8 +376,9 @@ function Dashboard() {
                                   { label: 'Source', render: (r) => r.source || '—' },
                                 ]}
                               />
-                              <AssembliesDetail
-                                assemblies={assembliesByVersion.get(rfe.id) ?? []}
+                              <PackoutsDetail
+                                packouts={packoutsByVersion.get(rfe.id) ?? []}
+                                tiers={(quantitiesByVersion.get(rfe.id) ?? []).map((q) => q.quantity ?? undefined)}
                               />
                             </div>
                           </TableCell>
@@ -406,7 +408,7 @@ function Dashboard() {
               This permanently removes the RFE and all{' '}
               {pendingDeleteVersionCount} version
               {pendingDeleteVersionCount === 1 ? '' : 's'}, including their
-              components and assemblies. This can't be undone.
+              components and packouts. This can't be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -476,34 +478,34 @@ function DetailTable<T extends { id: string | number }>({
   )
 }
 
-function AssembliesDetail({ assemblies }: { assemblies: AssemblyRow[] }) {
+function PackoutsDetail({ packouts, tiers }: { packouts: PackoutRow[]; tiers: (number | undefined)[] }) {
   return (
     <div>
       <p className="mb-1 text-xs font-medium text-muted-foreground">Builds</p>
-      {assemblies.length === 0 ? (
+      {packouts.length === 0 ? (
         <p className="text-xs text-muted-foreground">None</p>
       ) : (
         <div className="flex flex-col gap-3 rounded-sm border bg-green-600/3 border-green-950/20 p-2">
-          {assemblies.map((assembly, i) => (
-            <div key={assembly.id} className="flex flex-col gap-0.5 text-sm">
+          {packouts.map((packout, i) => (
+            <div key={packout.id} className="flex flex-col gap-0.5 text-sm">
               <p className="font-medium">
-                Assembly {i + 1} (
-                {formatUnitCounts(assembly.num_of_units) ?? '—'} units)
+                Packout {i + 1} (
+                {formatByTier(loadQtys(packout.num_of_units, 'units'), tiers) ?? '—'} units)
               </p>
-              {(assembly.unit_build ?? []).map((item, j) => (
+              {loadKitItems(packout.kit_build).map((item, j) => (
                 <p key={j} className="pl-3 text-muted-foreground">
-                  {item.component_name || 'Untitled component'}: {item.qty_per_unit ?? '—'} per unit
+                  {item.componentName || 'Untitled component'}: {item.qtyPerKit ?? '—'} per unit
                 </p>
               ))}
-              {(assembly.pack_type || assembly.units_per_pack) && (
+              {(packout.pack_type || packout.units_per_pack) && (
                 <p className="pl-3 text-muted-foreground">
-                  Packed: {assembly.units_per_pack ?? '—'} per{' '}
-                  {assembly.pack_type || '—'}
+                  Packed: {packout.units_per_pack ?? '—'} per{' '}
+                  {packout.pack_type || '—'}
                 </p>
               )}
-              {(assembly.steps?.length ?? 0) > 0 && (
+              {(packout.kitting_steps?.length ?? 0) > 0 && (
                 <ol className="mt-1 list-decimal pl-8 text-muted-foreground">
-                  {[...(assembly.steps ?? [])]
+                  {[...(packout.kitting_steps ?? [])]
                     .sort((a, b) => a.step - b.step)
                     .map((step) => (
                       <li key={step.step}>{step.instruction}</li>
