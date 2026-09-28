@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronRightIcon, GripVerticalIcon, X, Plus } from 'lucide-react'
 import { DragDropProvider } from '@dnd-kit/react'
+import { ChevronRightIcon } from 'lucide-react'
 import { useSortable } from '@dnd-kit/react/sortable'
 import { Input } from '@/components/ui/input'
 import { Field, FieldLabel, FieldError } from '@/components/ui/field'
@@ -142,7 +143,7 @@ function ComponentCard({
             collapsible={collapsible}
             isOpen={isOpen}
             onOpenChange={onOpenChange}
-            header={(handleRef) => collapsible
+            header={() => collapsible
                 && (<div className='flex justify-between w-full items-center'>
                     {/* <Button
                         ref={handleRef}
@@ -353,7 +354,7 @@ function ComponentCard({
 function Components() {
     const { control } = useFormContext<FormValues>()
 
-    const { fields, append, remove, move } = useFieldArray({
+    const { fields, append, remove } = useFieldArray({
         control,
         name: 'components',
     })
