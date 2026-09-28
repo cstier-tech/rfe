@@ -86,18 +86,18 @@ function Preview({ getValues }: { getValues: UseFormGetValues<any> }) {
             key: 'jobType',
             value: values.jobType
         },
-        {
-            label: 'Is this a kit?',
-            key: 'isKit',
-            value: values.kittingRequired
-        },
+        // {
+        //     label: 'Is this a kit?',
+        //     key: 'isKit',
+        //     value: values.kittingRequired
+        // },
         {
             label: 'Quantity:',
             key: 'qty',
-            value: (values.qty ?? []).map((item: { qty?: number; }, index: number) => ({
+            value: (values.qty ?? []).map((qty: number | undefined, index: number) => ({
                 index: index,
-                name: String(item.qty ?? ''),
-                value: item.qty ?? '',
+                name: String(qty ?? ''),
+                value: qty ?? '',
             })),
         }
     ]
@@ -206,9 +206,9 @@ function Preview({ getValues }: { getValues: UseFormGetValues<any> }) {
                         ))}
                     </SidebarGroup>
                     <SidebarGroup>
-                        {(values.assemblies ?? []).map((p: any, i: number) => (
+                        {(values.packouts ?? []).map((p: any, i: number) => (
                             <div key={p.id}>
-                                <span className='font-light text-gray-600 text-sm'>Assembly {i + 1}</span>
+                                <span className='font-light text-gray-600 text-sm'>Packout {i + 1}</span>
                                 <Table>
                                     <TableBody>
                                         <TableRow>

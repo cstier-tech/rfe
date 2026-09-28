@@ -27,7 +27,7 @@ function Shipping() {
     })
     return (
         <div className="flex flex-col gap-4">
-            <Field name="totalShipments" className="max-w-64">
+            <Field name="totalShipments" >
                 <FieldLabel htmlFor="totalShipments">
                     Total Number of Shipments *
                 </FieldLabel>
@@ -42,6 +42,19 @@ function Shipping() {
                 />
                 <FieldError errors={[errors.totalShipments]} />
             </Field>
+
+            <Field name="labelInstructions" >
+                <FieldLabel htmlFor="labelInstructions">
+                    Labeling Instructions
+                </FieldLabel>
+                <Textarea
+                    id="labelInstructions"
+                    {...register('labelInstructions', {
+                    })}
+                />
+                <FieldError errors={[errors.labelInstructions]} />
+            </Field>
+
 
 
             <div className="flex flex-col gap-3">

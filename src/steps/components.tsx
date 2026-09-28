@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { ChevronRightIcon, GripVerticalIcon, X, Plus } from 'lucide-react'
+import { DragDropProvider } from '@dnd-kit/react'
 import { ChevronRightIcon } from 'lucide-react'
 import { useSortable } from '@dnd-kit/react/sortable'
 import { Input } from '@/components/ui/input'
@@ -435,6 +437,8 @@ function Components() {
             <Button
                 type="button"
                 variant="outline"
+                size='sm'
+                className='w-auto self-start'
                 onClick={() =>
                     append({
                         id: crypto.randomUUID(),
@@ -451,6 +455,7 @@ function Components() {
                     })
                 }
             >
+                <Plus />
                 Add component
             </Button>
             {/* // } */}

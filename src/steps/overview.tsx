@@ -10,7 +10,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { DatePickerInput } from '@/components/ui/datepicker'
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { useFormContext, Controller, useWatch, useFieldArray } from 'react-hook-form'
+import { useFormContext, Controller, useWatch } from 'react-hook-form'
 import type { FormValues } from '@/lib/form'
 
 // const kittingRequiredOptions = [
@@ -22,6 +22,8 @@ function Overview() {
     const {
         register,
         control,
+        setValue,
+        clearErrors,
         formState: { errors },
     } = useFormContext<FormValues>()
 
@@ -31,11 +33,14 @@ function Overview() {
         defaultValue: 'New Job',
     })
 
-    const {
-        fields: qtyFields,
-        append: appendQty,
-        remove: removeQty,
-    } = useFieldArray({ control, name: 'qty' })
+    // `qty` is a flat number array, which useFieldArray doesn't support, so
+    // tiers are added/removed by setting the whole array.
+    const qtys = useWatch({ control, name: 'qty' }) ?? []
+    const setQtys = (next: FormValues['qty']) => {
+        setValue('qty', next, { shouldDirty: true })
+        // Errors are index-keyed, so they'd no longer line up after a removal.
+        clearErrors('qty')
+    }
 
     return (
         <div className="flex flex-col gap-4">
@@ -149,7 +154,7 @@ function Overview() {
             {/* <RadioButtonGroup
                 control={control}
                 name='kittingRequired'
-                legend='Is assembly (kitting) required? *'
+                legend='Is packout (kitting) required? *'
                 options={kittingRequiredOptions}
                 rules={{ required: 'Select yes or no' }}
             /> */}
@@ -167,14 +172,14 @@ function Overview() {
                     add all of them using the Add qty button.
                 </FieldDescription>
                 <div className='flex flex-col gap-2'>
-                    {qtyFields.length === 0 && (
+                    {qtys.length === 0 && (
                         <p className='text-sm text-muted-foreground'>
                             No quantities yet.
                         </p>
                     )}
-                    {qtyFields.map((qtyField, index) => (
+                    {qtys.map((_, index) => (
                         <div
-                            key={qtyField.id}
+                            key={index}
                             className='flex items-start gap-2'
                         >
                             <div className='flex flex-col gap-1'>
@@ -182,20 +187,20 @@ function Overview() {
                                     type='number'
                                     className='w-32 aria-[invalid=true]:bg-red-50 aria-[invalid=true]:border-destructive'
                                     aria-label={`Quantity ${index + 1}`}
-                                    {...register(`qty.${index}.qty`, {
+                                    {...register(`qty.${index}`, {
                                         required: 'Required',
                                         valueAsNumber: true,
                                         min: { value: 1, message: 'Min 1' },
                                     })}
                                     aria-invalid={
-                                        errors.qty?.[index]?.qty
+                                        errors.qty?.[index]
                                             ? 'true'
                                             : undefined
                                     }
                                 />
                                 <FieldError
                                     className='text-xs'
-                                    errors={[errors.qty?.[index]?.qty]}
+                                    errors={[errors.qty?.[index]]}
                                 />
                             </div>
                             {index > 0 &&
@@ -203,7 +208,7 @@ function Overview() {
                                     type='button'
                                     variant='ghost'
                                     size='sm'
-                                    onClick={() => removeQty(index)}
+                                    onClick={() => setQtys(qtys.filter((_, i) => i !== index))}
                                 >
                                     Remove
                                 </Button>
@@ -211,13 +216,13 @@ function Overview() {
 
                         </div>
                     ))}
-                    {qtyFields.length < 5 && (
+                    {qtys.length < 5 && (
                         <Button
                         type='button'
                         variant='outline'
                         size='sm'
                         className='self-start'
-                        onClick={() => appendQty({})}
+                        onClick={() => setQtys([...qtys, undefined])}
                     >
                         Add qty
                     </Button>
