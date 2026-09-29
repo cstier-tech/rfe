@@ -235,7 +235,7 @@ function RfeView() {
 
             <Section title="Shipping">
               <FieldTable>
-                <FieldRow label="Total Number of Shipments" value={values.totalShipments} />
+                <FieldRow label="Total Number of Shipments" value={values.totalShipments.join(', ')} />
                 <FieldRow label="Shipment Method" value={values.shipMethod} />
                 <FieldRow label="Label Instructions" value={values.labelInstructions} />
                 <FieldRow

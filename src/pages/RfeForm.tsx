@@ -123,7 +123,7 @@ const blankFormValues = (): FormValues => ({
   components: [defaultComponent()],
   // convenientCartons: false,
   packouts: [defaultPackout()],
-  totalShipments: undefined,
+  totalShipments: [],
   labelInstructions: undefined,
   shipMethod: undefined,
   asnRequired: false,
@@ -315,7 +315,8 @@ function RfeForm() {
         // version_type: data.,
         // kitting_required: data.kittingRequired,
         // convenient_cartons: data.convenientCartons,
-        num_of_shipments: data.totalShipments,
+        // Trimmed to the current tiers in case tiers were removed after entry.
+        num_of_shipments2: data.totalShipments.slice(0, data.qty.length),
         label_instructions: data.labelInstructions,
         asn_required: data.asnRequired,
         asn_instructions: data.asnInstructions,

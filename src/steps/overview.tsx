@@ -23,6 +23,7 @@ function Overview() {
         register,
         control,
         setValue,
+        getValues,
         clearErrors,
         formState: { errors },
     } = useFormContext<FormValues>()
@@ -208,7 +209,14 @@ function Overview() {
                                     type='button'
                                     variant='ghost'
                                     size='sm'
-                                    onClick={() => setQtys(qtys.filter((_, i) => i !== index))}
+                                    onClick={() => {
+                                        setQtys(qtys.filter((_, i) => i !== index))
+                                        // Keep per-tier shipment counts lined up with the remaining tiers.
+                                        setValue(
+                                            'totalShipments',
+                                            (getValues('totalShipments') ?? []).filter((_, i) => i !== index),
+                                        )
+                                    }}
                                 >
                                     Remove
                                 </Button>

@@ -5,6 +5,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { RadioButtonGroup } from '@/components/ui/radio-button-group'
 import { Field, FieldLabel, FieldError } from '@/components/ui/field'
 import type { FormValues } from '@/lib/form'
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 
 const SHIP_METHODS = ['Drop Ship', 'Bulk Ship'] as const
 const SHIP_METHODS_RADIO_OPTIONS = SHIP_METHODS.map((option) => ({
@@ -25,23 +26,42 @@ function Shipping() {
         control,
         name: 'internationalShipment',
     })
+    const overviewQtyTiers = useWatch({ control, name: 'qty' }) ?? []
+    const multipleTiers = overviewQtyTiers.length > 1
     return (
         <div className="flex flex-col gap-4">
-            <Field name="totalShipments" >
-                <FieldLabel htmlFor="totalShipments">
-                    Total Number of Shipments *
-                </FieldLabel>
-                <Input
-                    id="totalShipments"
-                    type="number"
-                    {...register('totalShipments', {
-                        required: 'Total Number of Shipments is required',
-                        valueAsNumber: true,
-                        min: { value: 1, message: 'Must be at least 1' },
+            <div className='flex flex-col gap-1.5'>
+                <span>{multipleTiers ? 'Total # of Shipments per Unit Tier *' : 'Total # of Shipments *'}</span>
+                {/* Inline style since Tailwind can't generate a dynamic grid-cols-N class. */}
+                <div
+                    className='grid gap-2'
+                    style={{ gridTemplateColumns: `repeat(${Math.max(overviewQtyTiers.length, 1)}, minmax(0, 1fr))` }}
+                >
+                    {overviewQtyTiers.map((tier, tierIndex) => {
+                        const inputProps = {
+                            id: `totalShipments-${tierIndex}`,
+                            type: 'number',
+                            ...register(`totalShipments.${tierIndex}`, {
+                                required: 'Total Number of Shipments is required',
+                                valueAsNumber: true,
+                                min: { value: 1, message: 'Must be at least 1' },
+                            }),
+                        }
+                        return (
+                            <Field name={`totalShipments.${tierIndex}`} key={tierIndex}>
+                                {multipleTiers
+                                    ? <InputGroup>
+                                        <InputGroupInput {...inputProps} />
+                                        <InputGroupAddon className='text-xs' align='inline-end'>@ {tier ?? '—'}</InputGroupAddon>
+                                    </InputGroup>
+                                    : <Input {...inputProps} />}
+                                <FieldError errors={[errors.totalShipments?.[tierIndex]]} />
+                            </Field>
+                        )
                     })}
-                />
-                <FieldError errors={[errors.totalShipments]} />
-            </Field>
+                </div>
+            </div>
+
 
             <Field name="labelInstructions" >
                 <FieldLabel htmlFor="labelInstructions">

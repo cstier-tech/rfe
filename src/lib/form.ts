@@ -119,7 +119,8 @@ export type FormValues = {
   packouts: Packout[]
 
   // Shipping
-  totalShipments?: number
+  // Shipments needed at each qty tier; lines up by index with `qty`.
+  totalShipments: (number | undefined)[]
   labelInstructions?: string
   shipMethod?: 'Drop Ship' | 'Bulk Ship'
   asnRequired?: boolean

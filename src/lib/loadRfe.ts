@@ -118,7 +118,8 @@ export async function loadRfe(rfeId: string): Promise<LoadedRfe | null> {
         packsPerCarton: numberOrUndefined(packout.packs_per_carton),
         totalCartons: loadQtys(packout.total_cartons, 'total_cartons'),
       })),
-      totalShipments: numberOrUndefined(version.num_of_shipments),
+      // Per-tier shipment counts (jsonb number array).
+      totalShipments: ((version.num_of_shipments2 ?? []) as (number | null)[]).map(numberOrUndefined),
       labelInstructions: version.label_instructions ?? '',
       shipMethod: (version.ship_method ?? undefined) as FormValues['shipMethod'],
       asnRequired: version.asn_required ?? false,
