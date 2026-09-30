@@ -2,8 +2,8 @@ import { Fragment, useEffect, useState } from 'react'
 import { Check, ChevronRightIcon, MoreVertical } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
-import { formatByTier } from '@/lib/form'
-import { loadKitItems, loadQtys } from '@/lib/loadRfe'
+import { formatByTier, packLayerName, type PackoutBuild } from '@/lib/form'
+import { loadPackoutBuild } from '@/lib/loadRfe'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -61,11 +61,7 @@ type ComponentRow = {
 type PackoutRow = {
   id: number
   version_id: string
-  num_of_units: Parameters<typeof loadQtys>[0]
-  kitting_steps: { step: number; instruction: string }[] | null
-  kit_build: Parameters<typeof loadKitItems>[0]
-  pack_type: string | null
-  units_per_pack: string | null
+  packout_build: PackoutBuild | null
 }
 
 type QuantityRow = {
@@ -486,34 +482,34 @@ function PackoutsDetail({ packouts, tiers }: { packouts: PackoutRow[]; tiers: (n
         <p className="text-xs text-muted-foreground">None</p>
       ) : (
         <div className="flex flex-col gap-3 rounded-sm border bg-green-600/3 border-green-950/20 p-2">
-          {packouts.map((packout, i) => (
-            <div key={packout.id} className="flex flex-col gap-0.5 text-sm">
-              <p className="font-medium">
-                Packout {i + 1} (
-                {formatByTier(loadQtys(packout.num_of_units, 'units'), tiers) ?? '—'} units)
-              </p>
-              {loadKitItems(packout.kit_build).map((item, j) => (
-                <p key={j} className="pl-3 text-muted-foreground">
-                  {item.componentName || 'Untitled component'}: {item.qtyPerKit ?? '—'} per unit
+          {packouts.map((packout, i) => {
+            const build = loadPackoutBuild(packout.packout_build)
+            return (
+              <div key={packout.id} className="flex flex-col gap-0.5 text-sm">
+                <p className="font-medium">
+                  Packout {i + 1} ({formatByTier(build.qty, tiers) ?? '—'} units)
                 </p>
-              ))}
-              {(packout.pack_type || packout.units_per_pack) && (
-                <p className="pl-3 text-muted-foreground">
-                  Packed: {packout.units_per_pack ?? '—'} per{' '}
-                  {packout.pack_type || '—'}
-                </p>
-              )}
-              {(packout.kitting_steps?.length ?? 0) > 0 && (
-                <ol className="mt-1 list-decimal pl-8 text-muted-foreground">
-                  {[...(packout.kitting_steps ?? [])]
-                    .sort((a, b) => a.step - b.step)
-                    .map((step) => (
-                      <li key={step.step}>{step.instruction}</li>
+                {build.kitItems.map((item, j) => (
+                  <p key={j} className="pl-3 text-muted-foreground">
+                    {item.componentName || 'Untitled component'}: {item.qtyPerKit ?? '—'} per unit
+                  </p>
+                ))}
+                {build.packing.map((layer, j) => (
+                  <p key={layer.id} className="pl-3 text-muted-foreground">
+                    Packed: {layer.qtyPer ?? '—'}{' '}
+                    {j === 0 ? 'units' : packLayerName(build.packing[j - 1])} per {packLayerName(layer)}
+                  </p>
+                ))}
+                {build.kitSteps.length > 0 && (
+                  <ol className="mt-1 list-decimal pl-8 text-muted-foreground">
+                    {build.kitSteps.map((step, s) => (
+                      <li key={s}>{step.instruction}</li>
                     ))}
-                </ol>
-              )}
-            </div>
-          ))}
+                  </ol>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

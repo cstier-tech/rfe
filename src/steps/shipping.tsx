@@ -4,7 +4,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { RadioButtonGroup } from '@/components/ui/radio-button-group'
 import { Field, FieldLabel, FieldError } from '@/components/ui/field'
-import type { FormValues } from '@/lib/form'
+import { hasOverage, type FormValues } from '@/lib/form'
 
 const SHIP_METHODS = ['Drop Ship', 'Bulk Ship'] as const
 const SHIP_METHODS_RADIO_OPTIONS = SHIP_METHODS.map((option) => ({
@@ -17,6 +17,7 @@ function Shipping() {
         register,
         control,
         unregister,
+        getValues,
         formState: { errors },
     } = useFormContext<FormValues>()
 
@@ -25,23 +26,77 @@ function Shipping() {
         control,
         name: 'internationalShipment',
     })
+    const qtyTiers = useWatch({ control, name: 'qty' }) ?? []
+    const shipments = useWatch({ control, name: 'totalShipments' }) ?? []
+    const multipleTiers = qtyTiers.length > 1
+    const tierSuffix = (tier: number | undefined) => (multipleTiers ? ` @ qty ${tier ?? 0}` : '')
+
+    const overageTiers = qtyTiers
+        .map((tier, tierIndex) => ({ tier, tierIndex }))
+        .filter(({ tier, tierIndex }) => hasOverage(shipments[tierIndex], tier))
+
     return (
         <div className="flex flex-col gap-4">
-            <Field name="totalShipments" >
-                <FieldLabel htmlFor="totalShipments">
-                    Total Number of Shipments *
-                </FieldLabel>
-                <Input
-                    id="totalShipments"
-                    type="number"
-                    {...register('totalShipments', {
-                        required: 'Total Number of Shipments is required',
-                        valueAsNumber: true,
-                        min: { value: 1, message: 'Must be at least 1' },
+            {/* One shipments field per overview qty tier. */}
+            <div className="flex flex-col gap-2">
+                <FieldLabel>Total Number of Shipments *</FieldLabel>
+                <div className="flex flex-wrap items-start gap-4">
+                    {qtyTiers.map((tier, tierIndex) => {
+                        const fieldName = `totalShipments.${tierIndex}.qty` as const
+                        return (
+                            <Field key={fieldName} name={fieldName} className="w-auto">
+                                {multipleTiers && (
+                                    <label htmlFor={fieldName} className="text-sm text-muted-foreground">
+                                        Shipments @ qty {tier ?? 0}
+                                    </label>
+                                )}
+                                <Input
+                                    id={fieldName}
+                                    type="number"
+                                    className="w-32"
+                                    aria-label={`Total Number of Shipments${tierSuffix(tier)}`}
+                                    // Defaults to the tier's qty. RHF reads this
+                                    // into the form value on register when the
+                                    // field is still blank; saved or entered
+                                    // values take precedence.
+                                    defaultValue={getValues(fieldName) ?? tier}
+                                    {...register(fieldName, {
+                                        required: 'Total Number of Shipments is required',
+                                        valueAsNumber: true,
+                                        min: { value: 1, message: 'Must be at least 1' },
+                                    })}
+                                />
+                                <FieldError errors={[errors.totalShipments?.[tierIndex]?.qty]} />
+                            </Field>
+                        )
                     })}
-                />
-                <FieldError errors={[errors.totalShipments]} />
-            </Field>
+                </div>
+            </div>
+
+            {/* An overage field for each tier whose shipments fall short of its qty.
+                A hidden field keeps its value (in case the shipments go back
+                down), but it isn't validated, and it's dropped on submit. */}
+            {overageTiers.length > 0 && (
+                <div className="flex flex-col gap-3">
+                    {overageTiers.map(({ tier, tierIndex }) => {
+                        const fieldName = `totalShipments.${tierIndex}.overageAction` as const
+                        return (
+                            <Field key={fieldName} name={fieldName}>
+                                <FieldLabel htmlFor={fieldName}>
+                                    What to do with the overage?{tierSuffix(tier)} *
+                                </FieldLabel>
+                                <Textarea
+                                    id={fieldName}
+                                    {...register(fieldName, {
+                                        required: 'Overage instructions are required',
+                                    })}
+                                />
+                                <FieldError errors={[errors.totalShipments?.[tierIndex]?.overageAction]} />
+                            </Field>
+                        )
+                    })}
+                </div>
+            )}
 
             <Field name="labelInstructions" >
                 <FieldLabel htmlFor="labelInstructions">

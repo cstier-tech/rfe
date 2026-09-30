@@ -10,13 +10,21 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { derivePackoutQtys, type ComponentSource, type FormValues } from '@/lib/form'
+import {
+  blankPackLayer,
+  derivePackoutQtys,
+  hasOverage,
+  toPackoutBuild,
+  type ComponentSource,
+  type FormValues,
+  type Packout,
+} from '@/lib/form'
 import { loadRfe } from '@/lib/loadRfe'
 import { supabase } from '@/lib/supabase'
 
 import Overview from '../steps/overview'
 import Components from '../steps/components'
-import Packouts, { PACK_TYPES } from '../steps/packout'
+import Packouts from '../steps/packout'
 import Shipping from '../steps/shipping'
 
 type Step = {
@@ -92,13 +100,14 @@ const defaultComponent = () => ({
 })
 
 
-const defaultPackout = () => ({
+const defaultPackout = (): Packout => ({
   id: crypto.randomUUID(),
+  kitId: crypto.randomUUID(),
   qty: [],
   kitItems: [],
   kitSteps: [],
-  packType: '',
-  cartonType: '',
+  // One blank layer to start; the user can remove it for no packing.
+  packing: [blankPackLayer()],
 })
 
 // A fully-specified blank form, explicitly clearing every field rather than
@@ -123,7 +132,8 @@ const blankFormValues = (): FormValues => ({
   components: [defaultComponent()],
   // convenientCartons: false,
   packouts: [defaultPackout()],
-  totalShipments: undefined,
+  // Filled in per tier by the Shipping step.
+  totalShipments: [],
   labelInstructions: undefined,
   shipMethod: undefined,
   asnRequired: false,
@@ -194,8 +204,6 @@ function RfeForm() {
         values.components.map((component) => [component.id, crypto.randomUUID()]),
       )
 
-      // Derived qtys (kitItems[].qty, totalPacksQty, totalCartons) come along
-      // as loaded but are always recomputed on submit, so they can't go stale.
       methods.reset({
         ...values,
         rfeId: isEditing ? sourceRfeId : crypto.randomUUID(),
@@ -209,19 +217,13 @@ function RfeForm() {
                 id: componentIdMap.get(component.id)!,
               }))
             : [defaultComponent()],
-        packouts: values.packouts.map((packout) => {
-          // Unknown saved pack types were entered via "Other" — unfold them.
-          const isKnownPackType = packout.packType === '' || PACK_TYPES.includes(packout.packType)
-          return {
-            ...packout,
-            kitItems: packout.kitItems.map((item) => ({
-              ...item,
-              componentId: componentIdMap.get(item.componentId) ?? item.componentId,
-            })),
-            packType: isKnownPackType ? packout.packType : 'Other',
-            packTypeOther: isKnownPackType ? undefined : packout.packType,
-          }
-        }),
+        packouts: values.packouts.map((packout) => ({
+          ...packout,
+          kitItems: packout.kitItems.map((item) => ({
+            ...item,
+            componentId: componentIdMap.get(item.componentId) ?? item.componentId,
+          })),
+        })),
       })
 
       setLoading(false)
@@ -242,27 +244,7 @@ function RfeForm() {
 
 
 
-  const onSubmit = async (formData: FormValues) => {
-    // What's saved is the form data plus its derived qtys, with the "Other"
-    // pack type placeholder folded into `packType`.
-    const componentNames = new Map(formData.components.map((c) => [c.id, c.name]))
-    const data: FormValues = {
-      ...formData,
-      packouts: formData.packouts.map(({ packTypeOther, ...packout }) => {
-        const derived = derivePackoutQtys(packout, formData.qty, formData.packouts.length > 1)
-        return {
-          ...packout,
-          ...derived,
-          // Refreshed here since components may have been renamed.
-          kitItems: derived.kitItems.map((item) => ({
-            ...item,
-            componentName: componentNames.get(item.componentId) ?? '',
-          })),
-          packType: packout.packType === 'Other' ? (packTypeOther ?? '') : packout.packType,
-        }
-      }),
-    }
-
+  const onSubmit = async (data: FormValues) => {
     console.log(data)
 
     if (isNewRfe) {
@@ -315,7 +297,15 @@ function RfeForm() {
         // version_type: data.,
         // kitting_required: data.kittingRequired,
         // convenient_cartons: data.convenientCartons,
-        num_of_shipments: data.totalShipments,
+        // One { qty, overageAction } per qty tier, in tier order. The overage
+        // action is dropped for tiers with no overage.
+        num_of_shipments2: data.qty.map((tier, i) => {
+          const shipment = data.totalShipments[i]
+          return {
+            qty: shipment?.qty ?? null,
+            overageAction: hasOverage(shipment, tier) ? (shipment?.overageAction ?? '') : null,
+          }
+        }),
         label_instructions: data.labelInstructions,
         asn_required: data.asnRequired,
         asn_instructions: data.asnInstructions,
@@ -353,24 +343,17 @@ function RfeForm() {
 
     if (componentsError) console.error(componentsError)
 
-    // Each jsonb column holds the matching form field as-is.
+    // Everything about a packout lives in its `packout_build` jsonb. Totals
+    // aren't saved; they're recomputed from it wherever they're shown.
+    const componentNames = new Map(data.components.map((c) => [c.id, c.name]))
     const { error: packoutsError } = await supabase.from('Packouts').insert(
       data.packouts.map((packout) => ({
         version_id: data.versionId,
-        num_of_units: packout.qty,
-        kit_build: packout.kitItems,
-        pack_type: packout.packType,
-        units_per_pack: packout.unitsPerPack,
-        total_packs: packout.totalPacksQty,
-        carton_type: packout.cartonType,
-        custom_carton_source: packout.customCartonSource,
-        packs_per_carton: packout.packsPerCarton ?? null,
-        total_cartons: packout.totalCartons,
-        // Blank steps are dropped and the rest renumbered from 1.
-        kitting_steps: packout.kitSteps
-          .map((step) => step.instruction.trim())
-          .filter(Boolean)
-          .map((instruction, index) => ({ step: index + 1, instruction })),
+        packout_build: toPackoutBuild(
+          packout,
+          derivePackoutQtys(packout, data.qty, data.packouts.length > 1).qty,
+          componentNames,
+        ),
       })),
     )
 

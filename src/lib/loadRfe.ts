@@ -1,52 +1,54 @@
-import type { ComponentSource, FormValues, KitStep, PackoutItem } from '@/lib/form'
+import type {
+  ComponentSource,
+  FormValues,
+  KitLayerJson,
+  PackagingLayerJson,
+  Packout,
+  PackoutBuild,
+  ShipmentTier,
+} from '@/lib/form'
 import { supabase } from '@/lib/supabase'
-
-// Shape of `Packouts.kitting_steps` (jsonb). Steps are numbered on save.
-type SavedKitStep = { step: number; instruction: string }
-
-const loadKitSteps = (packout: { kitting_steps?: SavedKitStep[] | null; instructions?: string | null }): KitStep[] => {
-  const saved = packout.kitting_steps ?? []
-  if (saved.length > 0) {
-    return [...saved]
-      .sort((a, b) => Number(a.step) - Number(b.step))
-      .map((step) => ({ instruction: step.instruction ?? '' }))
-  }
-  // Packouts saved before `kitting_steps` existed only have free-text instructions.
-  return [{ instruction: packout.instructions ?? '' }]
-}
 
 const numberOrUndefined = (value: unknown) => (value != null ? Number(value) : undefined)
 
-// Per-tier qty arrays are saved as plain numbers. Rows saved before that
-// stored objects like { unit_tier, units } â€” `key` picks the value out of those.
-type LegacyTierQty = Record<string, number>
-export const loadQtys = (saved: (number | LegacyTierQty)[] | null, key: string) =>
-  (saved ?? []).map((value) => Number(typeof value === 'object' ? value?.[key] : value) || 0)
-
-// Older rows saved kit items as { component_id, component_name, qty_per_unit, pieces }.
-type LegacyKitItem = {
-  component_id: string
-  component_name: string
-  qty_per_unit: number
-  pieces: LegacyTierQty[]
+// Reads `Packouts.packout_build` back into a packout (minus its row id).
+export const loadPackoutBuild = (saved: PackoutBuild | null): Omit<Packout, 'id'> => {
+  const layers = saved ?? []
+  const kit = layers.find((layer): layer is KitLayerJson => layer.layer_type === 'kit')
+  // Saved innermost first, so array order is the packing order.
+  const packaging = layers.filter(
+    (layer): layer is PackagingLayerJson => layer.layer_type === 'packaging',
+  )
+  return {
+    kitId: kit?.id ?? crypto.randomUUID(),
+    qty: (kit?.units ?? []).map((units) => Number(units) || 0),
+    kitItems: (kit?.kit_build ?? []).map((item) => ({
+      componentId: item.component_id,
+      componentName: item.component_name ?? '',
+      qtyPerKit: Number(item.qty_per_unit) || 0,
+    })),
+    kitSteps: (kit?.steps ?? []).map((instruction) => ({ instruction })),
+    packing: packaging.map((layer) => ({
+      id: layer.id,
+      type: layer.type ?? '',
+      otherType: layer.otherType ?? '',
+      qtyPer: numberOrUndefined(layer.contains?.[0]?.qty_per) ?? null,
+    })),
+  }
 }
-export const loadKitItems = (saved: (PackoutItem | LegacyKitItem)[] | null): PackoutItem[] =>
-  (saved ?? []).map((item) =>
-    'component_id' in item
-      ? {
-          componentId: item.component_id,
-          componentName: item.component_name,
-          qtyPerKit: Number(item.qty_per_unit) || 0,
-          qty: loadQtys(item.pieces, 'total_pieces'),
-        }
-      : item,
+
+// Rows saved before overage actions existed hold plain numbers.
+const loadShipments = (saved: (number | ShipmentTier | null)[] | null): ShipmentTier[] =>
+  (saved ?? []).map((value) =>
+    value != null && typeof value === 'object'
+      ? { qty: numberOrUndefined(value.qty), overageAction: value.overageAction ?? '' }
+      : { qty: numberOrUndefined(value), overageAction: '' },
   )
 
-export type LoadedRfe = { versionNumber: number | null; values: FormValues }
+export type LoadedRfe = {versionNumber: number | null; values: FormValues }
 
 // Loads the latest version of an RFE as FormValues â€” the same shape the form
-// submits. Ids are the saved ones, and `packType` is the saved (already
-// folded) string; callers reusing this in the form adjust both.
+// submits. Ids are the saved ones; callers reusing this in the form adjust them.
 export async function loadRfe(rfeId: string): Promise<LoadedRfe | null> {
   const { data: versions, error } = await supabase
     .from('RFE Versions')
@@ -107,18 +109,9 @@ export async function loadRfe(rfeId: string): Promise<LoadedRfe | null> {
       })),
       packouts: (packoutsRes.data ?? []).map((packout) => ({
         id: String(packout.id),
-        qty: loadQtys(packout.num_of_units, 'units'),
-        kitItems: loadKitItems(packout.kit_build),
-        kitSteps: loadKitSteps(packout),
-        packType: packout.pack_type ?? '',
-        unitsPerPack: numberOrUndefined(packout.units_per_pack),
-        totalPacksQty: loadQtys(packout.total_packs, 'total_packs'),
-        cartonType: packout.carton_type ?? '',
-        customCartonSource: packout.custom_carton_source ?? '',
-        packsPerCarton: numberOrUndefined(packout.packs_per_carton),
-        totalCartons: loadQtys(packout.total_cartons, 'total_cartons'),
+        ...loadPackoutBuild(packout.packout_build),
       })),
-      totalShipments: numberOrUndefined(version.num_of_shipments),
+      totalShipments: loadShipments(version.num_of_shipments2),
       labelInstructions: version.label_instructions ?? '',
       shipMethod: (version.ship_method ?? undefined) as FormValues['shipMethod'],
       asnRequired: version.asn_required ?? false,
