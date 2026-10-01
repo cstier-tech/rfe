@@ -211,7 +211,7 @@ function Overview() {
                                     size='sm'
                                     onClick={() => {
                                         setQtys(qtys.filter((_, i) => i !== index))
-                                        // Keep per-tier shipment counts lined up with the remaining tiers.
+                                        // Keep per-tier shipments lined up with the remaining tiers.
                                         setValue(
                                             'totalShipments',
                                             (getValues('totalShipments') ?? []).filter((_, i) => i !== index),
@@ -226,16 +226,16 @@ function Overview() {
                     ))}
                     {qtys.length < 5 && (
                         <Button
-                        type='button'
-                        variant='outline'
-                        size='sm'
-                        className='self-start'
-                        onClick={() => setQtys([...qtys, undefined])}
-                    >
-                        Add qty
-                    </Button>
+                            type='button'
+                            variant='outline'
+                            size='sm'
+                            className='self-start'
+                            onClick={() => setQtys([...qtys, undefined])}
+                        >
+                            Add qty
+                        </Button>
                     )}
-                    
+
                 </div>
             </Field>
             {/* )} */}

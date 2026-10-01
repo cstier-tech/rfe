@@ -4,7 +4,7 @@ import { useParams } from 'react-router-dom'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 
-import { formatByTier } from '@/lib/form'
+import { derivePackoutQtys, formatByTier, packLayerName } from '@/lib/form'
 import { loadRfe, type LoadedRfe } from '@/lib/loadRfe'
 
 // Set by the "Hide empty fields" toggle; read by every FieldRow.
@@ -165,6 +165,7 @@ function RfeView() {
               ) : (
                 values.packouts.map((packout, i) => {
                   const steps = packout.kitSteps.filter((step) => step.instruction)
+                  const derived = derivePackoutQtys(packout, values.qty, values.packouts.length > 1)
                   return (
                     <div key={packout.id} className="flex flex-col gap-1 pb-2">
                       <p className="font-bold underline">Packout {i + 1}</p>
@@ -183,13 +184,13 @@ function RfeView() {
                             </tr>
                           </thead>
                           <tbody>
-                            {packout.kitItems.map((item) => (
+                            {packout.kitItems.map((item, k) => (
                               <tr key={item.componentId}>
                                 <td className="border px-3 py-1">
                                   {item.componentName || 'Untitled component'}
                                 </td>
                                 <td className="border px-3 py-1">{item.qtyPerKit}</td>
-                                {(item.qty ?? []).map((pieces, t) => (
+                                {(derived.kitItemPieces[k] ?? []).map((pieces, t) => (
                                   <td key={t} className="border px-3 py-1">{pieces}</td>
                                 ))}
                               </tr>
@@ -201,19 +202,26 @@ function RfeView() {
                         {values.packouts.length > 1 && (
                           <FieldRow label="Units" value={formatByTier(packout.qty, values.qty)} />
                         )}
-                        <FieldRow label="Pack Type" value={packout.packType} />
-                        <FieldRow label="Units per Pack" value={packout.unitsPerPack} />
-                        <FieldRow label="Total Packs" value={formatByTier(packout.totalPacksQty, values.qty)} />
-                        <FieldRow label="Carton Type" value={packout.cartonType} />
-                        {packout.cartonType === 'Custom' && (
-                          <FieldRow label="Custom Carton Source" value={packout.customCartonSource} />
-                        )}
-                        {packout.cartonType !== 'Convenient Cartons' && (
-                          <>
-                            <FieldRow label="Packs per Carton" value={packout.packsPerCarton} />
-                            <FieldRow label="Total Cartons" value={formatByTier(packout.totalCartons, values.qty)} />
-                          </>
-                        )}
+                        <FieldRow
+                          label="Packing"
+                          value={
+                            packout.packing.length > 0 && (
+                              <ol className="list-decimal pl-5">
+                                {packout.packing.map((layer, l) => {
+                                  const inner = l === 0 ? 'units' : packLayerName(packout.packing[l - 1])
+                                  const totals = derived.packTotals[l]
+                                  return (
+                                    <li key={layer.id}>
+                                      {packLayerName(layer)}
+                                      {layer.qtyPer != null && ` — ${layer.qtyPer} ${inner} per pack`}
+                                      {totals && `; ${formatByTier(totals, values.qty)} total`}
+                                    </li>
+                                  )
+                                })}
+                              </ol>
+                            )
+                          }
+                        />
                         <FieldRow
                           label="Kit Steps"
                           value={
@@ -235,7 +243,16 @@ function RfeView() {
 
             <Section title="Shipping">
               <FieldTable>
-                <FieldRow label="Total Number of Shipments" value={values.totalShipments.join(', ')} />
+                <FieldRow label="Total Number of Shipments" value={formatByTier(values.totalShipments.map((s) => Number(s.qty) || 0), values.qty)} />
+                <FieldRow
+                  label="Overage Instructions"
+                  value={
+                    values.totalShipments
+                      .map((s, i) => (s.overageAction ? `${s.overageAction}${values.qty.length > 1 ? ` @ ${values.qty[i] ?? '—'}` : ''}` : null))
+                      .filter(Boolean)
+                      .join('; ') || null
+                  }
+                />
                 <FieldRow label="Shipment Method" value={values.shipMethod} />
                 <FieldRow label="Label Instructions" value={values.labelInstructions} />
                 <FieldRow

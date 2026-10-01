@@ -3,15 +3,13 @@ import { useFormContext, useFieldArray, useWatch, Controller } from 'react-hook-
 import { Input } from '@/components/ui/input'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Button } from '@/components/ui/button'
-import { derivePackoutQtys, formatQty, type FormValues } from '@/lib/form'
+import { blankPackLayer, derivePackoutQtys, formatQty, packLayerName, type FormValues } from '@/lib/form'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Plus, X } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
-export const PACK_TYPES = ['Shrink Wrap', 'Banded', 'Convenient Cartons', 'Other']
-export const CARTON_TYPES = ['Convenient Cartons', 'Double Walled', 'Custom']
-export const CUSTOM_CARTON_SOURCE = ['Customer Supplied', 'Outside Purchase', 'Make on Packsize']
+export const PACK_TYPES = ['Shrink Wrap', 'Banded', 'Convenient Cartons', 'Double Walled Cartons', 'Other']
 
 // Vertical lines between columns, for the unit build and packout tables.
 const BORDERED_COLUMNS =
@@ -77,16 +75,202 @@ function KitSteps({ packoutIndex }: { packoutIndex: number }) {
     )
 }
 
+// Layers of packing, innermost first: the first row packs the units, and each
+// row after it packs the row before it. Starts with one blank row, which can be removed for no packing.
+function Packing({
+    packoutIndex,
+    units,
+    packTotals,
+}: {
+    packoutIndex: number
+    units: number[]
+    packTotals: (number[] | null)[]
+}) {
+    const {
+        control,
+        register,
+        setValue,
+        clearErrors,
+        formState: { errors },
+    } = useFormContext<FormValues>()
+    const { fields, append, remove } = useFieldArray({
+        control,
+        name: `packouts.${packoutIndex}.packing`,
+    })
+    const packing = useWatch({ control, name: `packouts.${packoutIndex}.packing` }) ?? []
+    const layerErrors = errors.packouts?.[packoutIndex]?.packing
+    const showOtherColumn = packing.some((layer) => layer?.type === 'Other')
+
+    return (
+        <div className="flex flex-col gap-2">
+            {fields.length > 0 && (
+                <div className="rounded-sm border bg-white">
+                    <Table className={BORDERED_COLUMNS}>
+                        <TableHeader>
+                            <TableRow className='text-xs'>
+                                <TableHead colSpan={showOtherColumn ? 3 : 2} className="text-center">
+                                    Packing
+                                </TableHead>
+                                <TableHead colSpan={units.length} className="text-center">
+                                    Total Packs
+                                </TableHead>
+                                <TableHead />
+                            </TableRow>
+                            <TableRow className='text-xs'>
+                                <TableHead>Pack Type</TableHead>
+                                {showOtherColumn && <TableHead>Other Type</TableHead>}
+                                <TableHead>Qty per Pack</TableHead>
+                                {units.map((count, tierIndex) => (
+                                    <TableHead key={tierIndex}>{count} units</TableHead>
+                                ))}
+                                <TableHead />
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {fields.map((field, layerIndex) => {
+                                const layer = packing[layerIndex]
+                                const fieldErrors = layerErrors?.[layerIndex]
+                                const fieldPrefix = `packouts.${packoutIndex}.packing.${layerIndex}` as const
+                                const label = `packing layer ${layerIndex + 1} of Packout Variant ${packoutIndex + 1}`
+                                const isConvenientCartons = layer?.type === 'Convenient Cartons'
+                                // What this layer holds: the units, or the previous layer's packs.
+                                const inner = layerIndex === 0
+                                    ? 'units'
+                                    : packLayerName(packing[layerIndex - 1] ?? { type: '' })
+
+                                return (
+                                    <TableRow key={field.id} className="align-top">
+                                        <TableCell>
+                                            <Controller
+                                                control={control}
+                                                name={`${fieldPrefix}.type`}
+                                                rules={{ required: 'Required' }}
+                                                render={({ field: typeField, fieldState }) => (
+                                                    <div className="flex flex-col gap-1">
+                                                        <Select
+                                                            value={typeField.value || undefined}
+                                                            onValueChange={(value) => {
+                                                                typeField.onChange(value)
+                                                                // Convenient Cartons hold however many fit.
+                                                                if (value === 'Convenient Cartons') {
+                                                                    setValue(`${fieldPrefix}.qtyPer`, null, { shouldDirty: true })
+                                                                    clearErrors(`${fieldPrefix}.qtyPer`)
+                                                                }
+                                                            }}
+                                                        >
+                                                            <SelectTrigger
+                                                                size="sm"
+                                                                className="w-full bg-white"
+                                                                aria-label={`Pack type for ${label}`}
+                                                                aria-invalid={fieldState.invalid || undefined}
+                                                                onBlur={typeField.onBlur}
+                                                            >
+                                                                <SelectValue placeholder="Select type" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {PACK_TYPES.map((packType) => (
+                                                                    <SelectItem key={packType} value={packType}>
+                                                                        {packType}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                        <FieldError className="text-xs" errors={[fieldState.error]} />
+                                                    </div>
+                                                )}
+                                            />
+                                        </TableCell>
+                                        {showOtherColumn && (
+                                            <TableCell>
+                                                {layer?.type === 'Other' && (
+                                                    <div className="flex w-32 flex-col gap-1">
+                                                        <Input
+                                                            className="h-7"
+                                                            placeholder="Specify type"
+                                                            aria-label={`Other pack type for ${label}`}
+                                                            {...register(`${fieldPrefix}.otherType`, {
+                                                                required: 'Required',
+                                                            })}
+                                                        />
+                                                        <FieldError className="text-xs" errors={[fieldErrors?.otherType]} />
+                                                    </div>
+                                                )}
+                                            </TableCell>
+                                        )}
+                                        <TableCell>
+                                            <div className="flex flex-col gap-1">
+                                                <div className="flex items-center gap-1">
+                                                    <Input
+                                                        type="number"
+                                                        step="1"
+                                                        className="h-7 w-20"
+                                                        aria-label={`${inner} per pack for ${label}`}
+                                                        disabled={isConvenientCartons}
+                                                        {...register(`${fieldPrefix}.qtyPer`, {
+                                                            required: isConvenientCartons ? false : 'Required',
+                                                            valueAsNumber: true,
+                                                            min: { value: 1, message: 'Min 1' },
+                                                        })}
+                                                    />
+                                                    <span className="text-xs whitespace-nowrap text-muted-foreground">
+                                                        {inner}
+                                                    </span>
+                                                </div>
+                                                <FieldError className="text-xs" errors={[fieldErrors?.qtyPer]} />
+                                            </div>
+                                        </TableCell>
+                                        {units.map((_, tierIndex) => {
+                                            const total = packTotals[layerIndex]?.[tierIndex]
+                                            return (
+                                                <TableCell key={tierIndex} className="align-middle">
+                                                    <span className="font-semibold">
+                                                        {total == null ? '-' : formatQty(total)}
+                                                    </span>
+                                                </TableCell>
+                                            )
+                                        })}
+                                        <TableCell className="align-middle">
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon-sm"
+                                                aria-label={`Remove ${label}`}
+                                                onClick={() => remove(layerIndex)}
+                                            >
+                                                <X />
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                )
+                            })}
+                        </TableBody>
+                    </Table>
+                </div>
+            )}
+            <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="w-auto self-start"
+                onClick={() =>
+                    append(blankPackLayer())
+                }
+            >
+                <Plus />
+                {fields.length === 0 ? 'Add Packing' : 'Add Packing Layer'}
+            </Button>
+        </div>
+    )
+}
+
 function Packouts() {
     const {
         control,
-        clearErrors,
         formState: { dirtyFields, errors },
         getValues,
         register,
         setValue,
         trigger,
-        unregister,
     } = useFormContext<FormValues>()
     const components = useWatch({ control, name: 'components' }) ?? []
     const overviewQtyTiers = useWatch({ control, name: 'qty' }) ?? []
@@ -165,10 +349,10 @@ function Packouts() {
         append({
             id: crypto.randomUUID(),
             qty: newPackoutQty,
+            kitId: crypto.randomUUID(),
             kitItems: [],
             kitSteps: [],
-            packType: '',
-            cartonType: '',
+            packing: [blankPackLayer()],
         })
 
         overviewQtyTiers.forEach((tier, tierIndex) => {
@@ -324,7 +508,7 @@ function Packouts() {
                                                         )
                                                         const item = itemIndex === -1 ? undefined : packout.kitItems[itemIndex]
                                                         const qtyError = packoutErrors?.kitItems?.[itemIndex]?.qtyPerKit
-                                                        const pieces = derived.kitItems[itemIndex]?.qty ?? []
+                                                        const pieces = derived.kitItemPieces[itemIndex] ?? []
 
                                                         return (
                                                             <TableRow key={component.id}>
@@ -365,257 +549,12 @@ function Packouts() {
                                     <KitSteps packoutIndex={packoutIndex} />
                                 </div>
                             )}
-                            {/* Row 6: unit pack. One per packout, so a single-row table laid out like the components table. */}
-                            <div className="col-span-4 rounded-sm border bg-white">
-                                <Table className={BORDERED_COLUMNS}>
-                                    <TableHeader>
-                                        <TableRow className='text-xs'>
-                                            <TableHead colSpan={packout.packType === 'Other' ? 3 : 2} className="text-center">
-                                                Packing
-                                            </TableHead>
-                                            <TableHead colSpan={overviewQtyTiers.length} className="text-center">
-                                                Total Packs
-                                            </TableHead>
-                                        </TableRow>
-                                        <TableRow className='text-xs'>
-                                            <TableHead>Pack Type</TableHead>
-                                            {packout.packType === 'Other' && <TableHead>Other Type</TableHead>}
-                                            <TableHead>Units per Pack</TableHead>
-                                            {derived.qty.map((units, tierIndex) => (
-                                                <TableHead key={tierIndex}>{units} units</TableHead>
-                                            ))}
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        <TableRow className="align-top">
-                                            <TableCell>
-                                                <Controller
-                                                    control={control}
-                                                    name={`packouts.${packoutIndex}.packType`}
-                                                    rules={{ required: 'Required' }}
-                                                    render={({ field: typeField, fieldState }) => (
-                                                        <div className="flex flex-col gap-1">
-                                                            <Select
-                                                                value={typeField.value || undefined}
-                                                                onValueChange={(value) => {
-                                                                    typeField.onChange(value)
-                                                                    if (value !== 'Other') {
-                                                                        unregister(`packouts.${packoutIndex}.packTypeOther`)
-                                                                    }
-                                                                }}
-                                                            >
-                                                                <SelectTrigger
-                                                                    size="sm"
-                                                                    className="w-full bg-white"
-                                                                    aria-label={`Pack type for Packout Variant ${packoutIndex + 1}`}
-                                                                    aria-invalid={fieldState.invalid || undefined}
-                                                                    onBlur={typeField.onBlur}
-                                                                >
-                                                                    <SelectValue placeholder="Select type" />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    {PACK_TYPES.map((packType) => (
-                                                                        <SelectItem key={packType} value={packType}>
-                                                                            {packType}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
-                                                            <FieldError className="text-xs" errors={[fieldState.error]} />
-                                                        </div>
-                                                    )}
-                                                />
-                                            </TableCell>
-                                            {packout.packType === 'Other' && (
-                                                <TableCell>
-                                                    <div className="flex w-36 flex-col gap-1">
-                                                        <Input
-                                                            className="h-7"
-                                                            placeholder="Specify type"
-                                                            aria-label={`Other pack type for Packout Variant ${packoutIndex + 1}`}
-                                                            {...register(`packouts.${packoutIndex}.packTypeOther`, {
-                                                                required: 'Required',
-                                                            })}
-                                                        />
-                                                        <FieldError className="text-xs" errors={[packoutErrors?.packTypeOther]} />
-                                                    </div>
-                                                </TableCell>
-                                            )}
-                                            <TableCell>
-                                                <div className="flex flex-col gap-1">
-                                                    <Input
-                                                        type="number"
-                                                        step="1"
-                                                        className="h-7 w-20"
-                                                        aria-label={`Units per pack for Packout Variant ${packoutIndex + 1}`}
-                                                        {...register(`packouts.${packoutIndex}.unitsPerPack`, {
-                                                            required: 'Required',
-                                                            valueAsNumber: true,
-                                                            min: { value: 1, message: 'Min 1' },
-                                                        })}
-                                                    />
-                                                    <FieldError className="text-xs" errors={[packoutErrors?.unitsPerPack]} />
-                                                </div>
-                                            </TableCell>
-                                            {derived.totalPacksQty.map((packs, tierIndex) => (
-                                                <TableCell key={tierIndex} className="align-middle">
-                                                    <span className="font-semibold">{formatQty(packs)}</span>
-                                                </TableCell>
-                                            ))}
-                                        </TableRow>
-                                    </TableBody>
-                                </Table>
-                            </div>
-
-                            {/* Row 6: unit pack. One per packout, so a single-row table laid out like the components table. */}
-                            <div className="col-span-4 rounded-sm border bg-white">
-                                <Table className={BORDERED_COLUMNS}>
-                                    <TableHeader>
-                                        <TableRow className='text-xs'>
-                                            <TableHead colSpan={3} className="text-center">
-                                                Carton/Boxing
-                                            </TableHead>
-                                            <TableHead colSpan={overviewQtyTiers.length} className="text-center">
-                                                Total Cartons/Boxes
-                                            </TableHead>
-                                        </TableRow>
-                                        <TableRow className='text-xs'>
-                                            <TableHead>Carton Type</TableHead>
-                                            {packout.cartonType === 'Custom' && <TableHead>Custom Carton Source</TableHead>}
-                                            <TableHead>Packs per Carton</TableHead>
-                                            {derived.qty.map((units, tierIndex) => (
-                                                <TableHead key={tierIndex}>{units} units</TableHead>
-                                            ))}
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        <TableRow className="align-top">
-                                            <TableCell>
-                                                <Controller
-                                                    control={control}
-                                                    name={`packouts.${packoutIndex}.cartonType`}
-                                                    rules={{ required: 'Required' }}
-                                                    render={({ field: typeField, fieldState }) => (
-                                                        <div className="flex flex-col gap-1">
-                                                            <Select
-                                                                value={typeField.value || undefined}
-                                                                onValueChange={(value) => {
-                                                                    typeField.onChange(value)
-                                                                    if (value !== 'Custom') {
-                                                                        unregister(`packouts.${packoutIndex}.customCartonSource`)
-                                                                    }
-                                                                    if (value === 'Convenient Cartons') {
-                                                                        const fieldName = `packouts.${packoutIndex}.packsPerCarton` as const
-                                                                        setValue(
-                                                                            fieldName,
-                                                                            null,
-                                                                            { shouldDirty: true },
-                                                                        )
-                                                                        clearErrors(fieldName)
-                                                                    }
-                                                                }}
-                                                            >
-                                                                <SelectTrigger
-                                                                    size="sm"
-                                                                    className="w-full bg-white"
-                                                                    aria-label={`Carton type for Packout Variant ${packoutIndex + 1}`}
-                                                                    aria-invalid={fieldState.invalid || undefined}
-                                                                    onBlur={typeField.onBlur}
-                                                                >
-                                                                    <SelectValue placeholder="Select type" />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    {CARTON_TYPES.map((cartonType) => (
-                                                                        <SelectItem key={cartonType} value={cartonType}>
-                                                                            {cartonType}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
-                                                            <FieldError className="text-xs" errors={[fieldState.error]} />
-                                                        </div>
-                                                    )}
-                                                />
-                                            </TableCell>
-                                            {packout.cartonType === 'Custom' && (
-                                                <TableCell>
-                                                    <div className="flex flex-col gap-1">
-                                                        {/* <Input
-                                                            className="h-7"
-                                                            placeholder="Specify type"
-                                                            aria-label={`Other pack type for Packout Variant ${packoutIndex + 1}`}
-                                                            {...register(`packouts.${packoutIndex}.customCartonSource`, {
-                                                                required: 'Required',
-                                                            })}
-                                                        /> */}
-
-                                                        <Controller
-                                                            control={control}
-                                                            name={`packouts.${packoutIndex}.customCartonSource`}
-                                                            rules={{ required: 'Required' }}
-                                                            render={({ field: typeField, fieldState }) => (
-                                                                <div className="flex w-40 flex-col gap-1">
-                                                                    <Select
-                                                                        value={typeField.value || undefined}
-                                                                        onValueChange={(value) => {
-                                                                            typeField.onChange(value)
-                                                                        }}
-                                                                    >
-                                                                        <SelectTrigger
-                                                                            size="sm"
-                                                                            className="w-full bg-white"
-                                                                            aria-label={`Custom carton source for Packout Variant ${packoutIndex + 1}`}
-                                                                            aria-invalid={fieldState.invalid || undefined}
-                                                                            onBlur={typeField.onBlur}
-                                                                        >
-                                                                            <SelectValue placeholder="Select source" />
-                                                                        </SelectTrigger>
-                                                                        <SelectContent>
-                                                                            {CUSTOM_CARTON_SOURCE.map((source) => (
-                                                                                <SelectItem key={source} value={source}>
-                                                                                    {source}
-                                                                                </SelectItem>
-                                                                            ))}
-                                                                        </SelectContent>
-                                                                    </Select>
-                                                                    <FieldError className="text-xs" errors={[fieldState.error]} />
-                                                                </div>
-                                                            )}
-                                                        />
-                                                        <FieldError className="text-xs" errors={[packoutErrors?.customCartonSource]} />
-                                                    </div>
-                                                </TableCell>
-                                            )}
-                                            <TableCell>
-                                                <div className="flex flex-col gap-1">
-                                                    <Input
-                                                        type="number"
-                                                        step="1"
-                                                        className="h-7 w-20"
-                                                        aria-label={`Packs per Carton for Packout Variant ${packoutIndex + 1}`}
-                                                        disabled={packout.cartonType === 'Convenient Cartons'}
-                                                        {...register(`packouts.${packoutIndex}.packsPerCarton`, {
-                                                            required: packout.cartonType === 'Convenient Cartons' ? false : 'Required',
-                                                            valueAsNumber: true,
-                                                            min: { value: 1, message: 'Min 1' },
-                                                        })}
-                                                    />
-                                                    <FieldError className="text-xs" errors={[packoutErrors?.packsPerCarton]} />
-                                                </div>
-                                            </TableCell>
-                                            {derived.totalCartons.map((cartons, tierIndex) => (
-                                                <TableCell key={tierIndex} className="align-middle">
-                                                    <span className="font-semibold">
-                                                        {packout.cartonType !== 'Convenient Cartons' ? formatQty(cartons) : '-'}
-                                                    </span>
-                                                </TableCell>
-                                            ))}
-                                        </TableRow>
-                                    </TableBody>
-                                </Table>
-                            </div>
-
-
+                            {/* Row 6: packing layers */}
+                            <Packing
+                                packoutIndex={packoutIndex}
+                                units={derived.qty}
+                                packTotals={derived.packTotals}
+                            />
                         </CardContent>
                     </Card>
                 )
